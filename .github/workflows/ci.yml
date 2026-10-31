@@ -22,7 +22,7 @@ jobs:
       matrix:
         java: [17, 21]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -53,7 +53,7 @@ jobs:
     name: Android module
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -77,7 +77,7 @@ jobs:
     name: Publishing dry run
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
