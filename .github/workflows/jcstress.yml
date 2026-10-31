@@ -29,7 +29,7 @@ jobs:
       - run: chmod +x gradlew
       - name: Run jcstress
         run: ./gradlew -PwithJcstress :clotho-jcstress:jcstress -PjcstressMode=${{ inputs.mode || 'default' }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: jcstress-results
