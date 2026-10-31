@@ -33,7 +33,7 @@ jobs:
         run: ./gradlew :clotho:build :clotho-test:build --stacktrace
       - name: Coverage report
         if: matrix.java == 17
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: jacoco-report
           path: |
@@ -41,7 +41,7 @@ jobs:
             clotho-test/build/reports/jacoco
       - name: Test reports
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-reports-jdk${{ matrix.java }}
           path: |
@@ -65,7 +65,7 @@ jobs:
         run: ./gradlew :clotho-android:testDebugUnitTest :clotho-android:lintDebug :clotho-android:spotlessCheck :app:assembleDebug --stacktrace
       - name: Reports
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: android-reports
           path: |
