@@ -1,0 +1,38 @@
+name: jcstress
+
+# Memory-model stress tests. They take minutes and want real cores, so they are not part of CI.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: jcstress mode
+        type: choice
+        options: [quick, default, tough]
+        default: default
+  schedule:
+    - cron: "0 3 * * 0" # weekly, Sunday 03:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  jcstress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - run: chmod +x gradlew
+      - name: Run jcstress
+        run: ./gradlew -PwithJcstress :clotho-jcstress:jcstress -PjcstressMode=${{ inputs.mode || 'default' }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jcstress-results
+          path: |
+            clotho-jcstress/results
+            clotho-jcstress/build/reports

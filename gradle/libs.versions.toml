@@ -1,0 +1,53 @@
+[versions]
+# Android Gradle Plugin. Robolectric 4.17 was built with 9.2.1; 9.3.1 is the project's version.
+agp = "9.3.1"
+spotless = "7.2.1"
+googleJavaFormat = "1.28.0"
+animalsniffer = "2.0.1"
+androidSignature = "7.0_r2"   # Android API 24 signature
+jacoco = "0.8.13"
+junit = "5.13.4"
+assertj = "3.27.3"
+# Checked against developer.android.com release pages (stable): startup 1.2.0, lifecycle 2.10.0.
+androidxStartup = "1.2.0"
+androidxLifecycle = "2.10.0"
+# Checked against robolectric.org/compatibility_table: 4.17 supports API 23 to 37 and was built
+# with Gradle 9.6.1. API 35 needs JDK 17; API 36 and 37 need JDK 21.
+robolectric = "4.17"
+junit4 = "4.13.2"
+# Instrumented tests. androidx.test 1.7.0 / ext-junit 1.3.0 / runner 1.7.0 are the stable versions
+# on developer.android.com/jetpack/androidx/releases/test.
+androidxTestCore = "1.7.0"
+androidxTestExtJunit = "1.3.0"
+androidxTestRunner = "1.7.0"
+# jcstress 0.16 is on Maven Central (checked); it was not confirmed to be the newest release.
+jcstress = "0.16"
+# JMH 1.37 is the last release I know of; not re-checked against Maven Central. Bump if a newer stable exists.
+jmh = "1.37"
+# Publishing to Maven Central (Central Portal). 0.37.0 (2026-06-21) is the newest I found; it needs
+# Gradle 9+, JDK 17+ and AGP 8.13+. It reads mavenCentralUsername/Password and signing.* properties.
+mavenPublish = "0.37.0"
+
+[libraries]
+spotless-gradle-plugin = { module = "com.diffplug.spotless:spotless-plugin-gradle", version.ref = "spotless" }
+animalsniffer-gradle-plugin = { module = "ru.vyarus:gradle-animalsniffer-plugin", version.ref = "animalsniffer" }
+junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
+androidx-startup-runtime = { module = "androidx.startup:startup-runtime", version.ref = "androidxStartup" }
+androidx-lifecycle-common = { module = "androidx.lifecycle:lifecycle-common", version.ref = "androidxLifecycle" }
+androidx-lifecycle-runtime = { module = "androidx.lifecycle:lifecycle-runtime", version.ref = "androidxLifecycle" }
+junit4 = { module = "junit:junit", version.ref = "junit4" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+androidx-test-core = { module = "androidx.test:core", version.ref = "androidxTestCore" }
+androidx-test-ext-junit = { module = "androidx.test.ext:junit", version.ref = "androidxTestExtJunit" }
+androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidxTestRunner" }
+jcstress-core = { module = "org.openjdk.jcstress:jcstress-core", version.ref = "jcstress" }
+jmh-core = { module = "org.openjdk.jmh:jmh-core", version.ref = "jmh" }
+jmh-generator = { module = "org.openjdk.jmh:jmh-generator-annprocess", version.ref = "jmh" }
+maven-publish-gradle-plugin = { module = "com.vanniktech:gradle-maven-publish-plugin", version.ref = "mavenPublish" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+android-library = { id = "com.android.library", version.ref = "agp" }

@@ -1,0 +1,14 @@
+.gradle/
+build/
+.idea/
+*.iml
+local.properties
+.DS_Store
+*.class
+.cg/
+/*/build/
+/*/.kotlin/*.gpg
+*.asc
+results/
+/.cg/
+*/build/

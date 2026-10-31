@@ -1,0 +1,61 @@
+name: Benchmarks
+
+# Clotho against java.util.concurrent (JMH). Manual: a shared runner is noisy, so read the
+# error bars. Every implementation runs in the same JVM fork on the same machine, so the
+# comparison between rows is fair even when the absolute numbers are not.
+on:
+  workflow_dispatch:
+    inputs:
+      quick:
+        description: Short smoke run (about 2 minutes) instead of the full run
+        type: boolean
+        default: false
+      filter:
+        description: Benchmark class regex (empty = all)
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - run: chmod +x gradlew
+      - name: Record the environment
+        run: |
+          {
+            echo "date:     $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "commit:   ${GITHUB_SHA}"
+            echo "runner:   ${RUNNER_OS} ${RUNNER_ARCH} (${ImageOS:-unknown} ${ImageVersion:-})"
+            echo "cpu:      $(lscpu | sed -n 's/^Model name:[[:space:]]*//p')"
+            echo "cores:    $(nproc) (shared virtual cores)"
+            echo "memory:   $(free -h | awk '/^Mem:/{print $2}')"
+            java -version 2>&1 | sed 's/^/java:     /'
+            echo "jmh:      $(grep '^jmh ' gradle/libs.versions.toml)"
+          } | tee environment.txt
+      - name: Run JMH
+        run: |
+          args=()
+          [ "${{ inputs.quick }}" = "true" ] && args+=("-PbenchQuick")
+          [ -n "${{ inputs.filter }}" ] && args+=("-PbenchFilter=${{ inputs.filter }}")
+          ./gradlew -PwithBench :clotho-bench:bench "${args[@]}"
+      - name: Build the report
+        run: |
+          python3 scripts/jmh_to_md.py clotho-bench/build/results/jmh/results.json environment.txt > report.md
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jmh-results
+          path: |
+            report.md
+            environment.txt
+            clotho-bench/build/results/jmh/results.json

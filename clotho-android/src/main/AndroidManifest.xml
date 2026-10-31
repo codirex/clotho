@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application>
+        <!--
+            Installs the Clotho main lane before the application starts. To opt out, remove this
+            entry in your manifest (tools:node="remove" on the meta-data) and call
+            AndroidMainLane.install() yourself.
+        -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="org.codirex.clotho.android.ClothoInitializer"
+                android:value="androidx.startup" />
+        </provider>
+    </application>
+</manifest>

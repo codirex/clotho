@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Pure JVM modules: format, Android API 24 check, strict javadoc, all tests, coverage report.
+  jvm:
+    name: JVM modules (JDK ${{ matrix.java }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        java: [17, 21]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+      - uses: gradle/actions/setup-gradle@v4
+      - run: chmod +x gradlew
+      - name: Build and test
+        run: ./gradlew :clotho:build :clotho-test:build --stacktrace
+      - name: Coverage report
+        if: matrix.java == 17
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: |
+            clotho/build/reports/jacoco
+            clotho-test/build/reports/jacoco
+      - name: Test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-jdk${{ matrix.java }}
+          path: |
+            **/build/reports/tests
+            **/build/test-results
+
+  # Android module: Robolectric tests, lint, and the sample app. Needs the Android SDK.
+  android:
+    name: Android module
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - run: chmod +x gradlew
+      - name: Test, lint, assemble
+        run: ./gradlew :clotho-android:testDebugUnitTest :clotho-android:lintDebug :clotho-android:spotlessCheck :app:assembleDebug --stacktrace
+      - name: Reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-reports
+          path: |
+            **/build/reports
+            **/build/test-results
+
+  # Publishing must stay possible: build every artifact exactly as the release would, unsigned.
+  publish-dry-run:
+    name: Publishing dry run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - run: chmod +x gradlew
+      - name: Publish to the local Maven repository
+        run: ./gradlew publishToMavenLocal --stacktrace
+      - name: List what would be released
+        run: find ~/.m2/repository/org/codirex/clotho -name '*.pom' -o -name '*.jar' -o -name '*.aar' | sort
