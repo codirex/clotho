@@ -1,6 +1,6 @@
 [versions]
 # Android Gradle Plugin. Robolectric 4.17 was built with 9.2.1; 9.3.1 is the project's version.
-agp = "9.3.1"
+agp = "9.5.0"
 spotless = "7.2.1"
 googleJavaFormat = "1.28.0"
 animalsniffer = "2.0.1"
