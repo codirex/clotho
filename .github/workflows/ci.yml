@@ -27,7 +27,7 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ matrix.java }}
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
       - run: chmod +x gradlew
       - name: Build and test
         run: ./gradlew :clotho:build :clotho-test:build --stacktrace
@@ -59,7 +59,7 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: android-actions/setup-android@v4
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
       - run: chmod +x gradlew
       - name: Test, lint, assemble
         run: ./gradlew :clotho-android:testDebugUnitTest :clotho-android:lintDebug :clotho-android:spotlessCheck :app:assembleDebug --stacktrace
@@ -83,7 +83,7 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: android-actions/setup-android@v4
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
       - run: chmod +x gradlew
       - name: Publish to the local Maven repository
         run: ./gradlew publishToMavenLocal --stacktrace
