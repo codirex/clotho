@@ -1,7 +1,7 @@
 name: Release
 
 # Publishes to Maven Central (Central Portal) when a version tag is pushed:
-#   1. set VERSION_NAME in gradle.properties AND Clotho.VERSION to the release (no -SNAPSHOT)
+#   1. set VERSION_NAME in gradle.properties to the release version (no -SNAPSHOT)
 #   2. commit, then:  git tag v0.1.0 && git push origin v0.1.0
 #
 # Repository secrets (Settings > Secrets and variables > Actions):
@@ -25,15 +25,29 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Tag must match the version in the build
+            - name: Tag must match the version in the build
         run: |
           version="$(sed -n 's/^VERSION_NAME=//p' gradle.properties)"
-          code="$(sed -n 's/.*String VERSION = "\(.*\)";/\1/p' clotho/src/main/java/org/codirex/clotho/Clotho.java)"
           tag="${GITHUB_REF_NAME#v}"
-          echo "tag=$tag VERSION_NAME=$version Clotho.VERSION=$code"
-          [ "$tag" = "$version" ] || { echo "::error::tag $tag != VERSION_NAME $version"; exit 1; }
-          [ "$code" = "$version" ] || { echo "::error::Clotho.VERSION $code != VERSION_NAME $version"; exit 1; }
-          case "$version" in *-SNAPSHOT) echo "::error::refusing to release a SNAPSHOT"; exit 1;; esac
+
+          echo "tag=$tag VERSION_NAME=$version"
+
+          [ -n "$version" ] || {
+            echo "::error::VERSION_NAME is missing from gradle.properties"
+            exit 1
+          }
+
+          [ "$tag" = "$version" ] || {
+            echo "::error::tag $tag != VERSION_NAME $version"
+            exit 1
+          }
+
+          case "$version" in
+            *-SNAPSHOT)
+              echo "::error::refusing to release a SNAPSHOT"
+              exit 1
+              ;;
+          esac
 
       - uses: actions/setup-java@v6
         with:
