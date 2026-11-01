@@ -25,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-            - name: Tag must match the version in the build
+      - name: Tag must match the version in the build
         run: |
           version="$(sed -n 's/^VERSION_NAME=//p' gradle.properties)"
           tag="${GITHUB_REF_NAME#v}"
