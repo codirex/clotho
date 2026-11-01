@@ -1,14 +1,3 @@
-// Publishing to Maven Central (Central Portal) for every published module, Java or Android.
-//
-// Credentials and signing keys are never in the repository. They come from Gradle properties:
-//   mavenCentralUsername, mavenCentralPassword            (Central Portal user token)
-//   signing.keyId, signing.password, signing.secretKeyRingFile
-// Locally they live in ~/.gradle/gradle.properties; in CI the release workflow passes them.
-// Without signing properties the build still works (publishToMavenLocal is unsigned).
-//
-// POM texts come from gradle.properties (POM_*) and from each module's own gradle.properties
-// (POM_NAME, POM_DESCRIPTION).
-
 plugins {
     id("com.vanniktech.maven.publish")
 }

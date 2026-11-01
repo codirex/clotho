@@ -51,3 +51,4 @@ maven-publish-gradle-plugin = { module = "com.vanniktech:gradle-maven-publish-pl
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-library = { id = "com.android.library", version.ref = "agp" }
+maven-publish = {id = "com.vanniktech.maven.publish", version.ref = "mavenPublish"}
