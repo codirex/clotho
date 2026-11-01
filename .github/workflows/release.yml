@@ -62,10 +62,18 @@ jobs:
 
       - name: Restore the signing key ring
         env:
-          KEYRING_B64: ${{ secrets.SIGNING_SECRET_KEY_RING_FILE_BASE64 }}
+          KEYRING: ${{ secrets.SIGNING_SECRET_KEY_RING_FILE_BASE64 }}
         run: |
-          [ -n "$KEYRING_B64" ] || { echo "::error::secret SIGNING_SECRET_KEY_RING_FILE_BASE64 is missing"; exit 1; }
-          printf '%s' "$KEYRING_B64" | base64 -d > "$RUNNER_TEMP/secring.gpg"
+          [ -n "$KEYRING" ] || { echo "::error::secret SIGNING_SECRET_KEY_RING_FILE_BASE64 is missing"; exit 1; }
+          if printf '%s' "$KEYRING" | head -c 10 | grep -q -- '-----BEGIN'; then
+            # armored text: turn it back into the binary key ring
+            printf '%s\n' "$KEYRING" | gpg --dearmor > "$RUNNER_TEMP/secring.gpg"
+          else
+            # base64 of the binary file
+            printf '%s' "$KEYRING" | tr -d '[:space:]' | base64 -d > "$RUNNER_TEMP/secring.gpg" \
+              || { echo "::error::secret is neither armored PGP text nor valid base64"; exit 1; }
+          fi
+          [ -s "$RUNNER_TEMP/secring.gpg" ] || { echo "::error::decoded key ring is empty"; exit 1; }
 
       - name: Publish to Maven Central
         env:
