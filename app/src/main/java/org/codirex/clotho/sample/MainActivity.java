@@ -35,7 +35,7 @@ public class MainActivity extends Activity {
     super.onCreate(savedInstanceState);
     TextView view = new TextView(this);
     view.setPadding(48, 96, 48, 48);
-    view.setText("Clotho " + Clotho.version() + ": working...");
+    view.setText("Clotho : working...");
     setContentView(view);
 
     realm
@@ -44,7 +44,7 @@ public class MainActivity extends Activity {
             Lane.main(),
             (text, cp) -> {
               view.setText(
-                  "Clotho " + Clotho.version() + "\n" + text + "\nshown on the main thread");
+                  "Clotho " + "\n" + text + "\nshown on the main thread");
               return text;
             });
   }

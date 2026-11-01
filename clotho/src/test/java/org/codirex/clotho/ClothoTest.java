@@ -24,16 +24,6 @@ import org.junit.jupiter.api.Test;
 class ClothoTest {
 
   @Test
-  void versionMatchesBuildVersion() {
-    assertThat(Clotho.version()).isEqualTo(System.getProperty("clotho.version"));
-  }
-
-  @Test
-  void versionIsNotBlank() {
-    assertThat(Clotho.version()).isNotBlank();
-  }
-
-  @Test
   void classIsFinalAndNotInstantiable() {
     assertThat(Modifier.isFinal(Clotho.class.getModifiers())).isTrue();
     Constructor<?>[] constructors = Clotho.class.getDeclaredConstructors();

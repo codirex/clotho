@@ -24,21 +24,9 @@ package org.codirex.clotho;
  */
 public final class Clotho {
 
-  /** The version of this build of Clotho. Must match {@code VERSION_NAME} in gradle.properties. */
-  public static final String VERSION = "0.1.0-SNAPSHOT";
-
   private static volatile UncaughtHandler defaultHandler = UncaughtHandler.stderr();
 
   private Clotho() {}
-
-  /**
-   * Returns the version of this build of Clotho.
-   *
-   * @return the version string, never {@code null}
-   */
-  public static String version() {
-    return VERSION;
-  }
 
   /**
    * Returns the handler used by realms that were not given their own.
