@@ -72,7 +72,7 @@ class ConcurrencyStressTest {
     }
     assertThat(cancelled + succeeded).isEqualTo(ROUNDS);
     // await() may return before callbacks ran; close() waits for them (they are outstanding work).
-    assertThat(realm.close(20, TimeUnit.SECONDS)).isTrue();
+    assertThat(realm.closeAfterWork(20, TimeUnit.SECONDS)).isTrue();
     for (AtomicInteger c : counters) {
       assertThat(c.get()).isEqualTo(1);
     }
@@ -99,7 +99,7 @@ class ConcurrencyStressTest {
         assertThat(ran.get()).isEqualTo(1);
       }
     }
-    assertThat(realm.close(20, TimeUnit.SECONDS)).isTrue();
+    assertThat(realm.closeAfterWork(20, TimeUnit.SECONDS)).isTrue();
   }
 
   @Test
@@ -119,7 +119,7 @@ class ConcurrencyStressTest {
       assertThat(v == 1 || v == 2).isTrue();
       assertThat(race.await()).isSameAs(outcome);
     }
-    assertThat(realm.close(20, TimeUnit.SECONDS)).isTrue();
+    assertThat(realm.closeAfterWork(20, TimeUnit.SECONDS)).isTrue();
     for (AtomicInteger c : counters) {
       assertThat(c.get()).isEqualTo(1);
     }
@@ -157,7 +157,7 @@ class ConcurrencyStressTest {
         threads.add(thread);
       }
       go.countDown();
-      realm.close();
+      realm.closeAfterWork();
       for (Thread thread : threads) {
         thread.join(20_000);
       }
@@ -184,7 +184,7 @@ class ConcurrencyStressTest {
               .then(pool, (v, cp) -> v + 1)
               .recover(pool, (t, cp) -> -1));
     }
-    realm.close();
+    realm.closeAfterWork();
     assertThat(realm.outstanding()).isEqualTo(0);
     for (Job<Integer> tail : tails) {
       assertThat(tail.outcomeOrNull()).isEqualTo(Outcome.success(3));

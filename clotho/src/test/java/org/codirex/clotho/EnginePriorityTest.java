@@ -73,7 +73,7 @@ class EnginePriorityTest extends EngineTestBase {
     task(engine, Priority.HIGH, "H2");
     task(engine, Priority.LOW, "L2");
     gate.open();
-    realm.close();
+    realm.closeAfterWork();
     assertThat(order).containsExactly("H1", "H2", "N1", "N2", "L1", "L2");
   }
 
@@ -86,7 +86,7 @@ class EnginePriorityTest extends EngineTestBase {
     task(engine, Priority.HIGH, "H2");
     clock.set(2 * STEP - 1);
     gate.open();
-    realm.close();
+    realm.closeAfterWork();
     assertThat(order).containsExactly("H1", "H2", "L");
   }
 
@@ -99,7 +99,7 @@ class EnginePriorityTest extends EngineTestBase {
     task(engine, Priority.HIGH, "H2");
     clock.set(2 * STEP);
     gate.open();
-    realm.close();
+    realm.closeAfterWork();
     assertThat(order).containsExactly("L", "H1", "H2");
   }
 
@@ -111,7 +111,7 @@ class EnginePriorityTest extends EngineTestBase {
     task(engine, Priority.HIGH, "H");
     clock.set(STEP);
     gate.open();
-    realm.close();
+    realm.closeAfterWork();
     assertThat(order).containsExactly("N", "H");
   }
 
@@ -124,7 +124,7 @@ class EnginePriorityTest extends EngineTestBase {
     clock.set(5 * STEP);
     task(engine, Priority.HIGH, "new-high");
     gate.open();
-    realm.close();
+    realm.closeAfterWork();
     // old-low waited 5 steps (capped at HIGH) and was queued first: it goes first
     assertThat(order).containsExactly("old-low", "new-high");
   }
@@ -158,7 +158,7 @@ class EnginePriorityTest extends EngineTestBase {
     realm.launch(engine.compute(), Priority.HIGH, chain[0]);
     gate.open();
     assertThat(lowRan.await(20, TimeUnit.SECONDS)).isTrue();
-    realm.close();
+    realm.closeAfterWork();
     // two steps of aging = four HIGH tasks; allow a small margin
     assertThat(highRan.get() < 10).isTrue();
   }
@@ -183,7 +183,7 @@ class EnginePriorityTest extends EngineTestBase {
     clock.set(1_000_000);
     task(engine, Priority.HIGH, "H2");
     gate.open();
-    realm.close();
+    realm.closeAfterWork();
     assertThat(order).containsExactly("H1", "H2", "L");
   }
 }
