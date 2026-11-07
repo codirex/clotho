@@ -82,7 +82,7 @@ class CadenceTest extends EngineTestBase {
     assertThat(ranAt.get() - begin >= 30 * MS).isTrue();
     assertThat(thread.get().contains("-io-")).isTrue();
     assertThat(thread.get().endsWith("-cadence")).isFalse();
-    realm.close();
+    realm.closeAfterWork();
     assertThat(count.get()).isEqualTo(1);
     assertThat(engine.cadence().pending()).isEqualTo(0);
   }
@@ -95,7 +95,7 @@ class CadenceTest extends EngineTestBase {
     assertThat(job.await(20, TimeUnit.SECONDS)).isEqualTo(Outcome.success("now"));
     assertThat(hasCadenceThread(engine)).isFalse();
     assertThat(engine.cadence().pending()).isEqualTo(0);
-    realm.close();
+    realm.closeAfterWork();
   }
 
   @Test
@@ -119,7 +119,7 @@ class CadenceTest extends EngineTestBase {
     assertThat(job.outcomeOrNull().isCancelled()).isTrue();
     awaitTrue(() -> !hasCadenceThread(engine));
     assertThat(ran.get()).isEqualTo(0);
-    realm.close();
+    realm.closeAfterWork();
   }
 
   @Test
@@ -134,7 +134,7 @@ class CadenceTest extends EngineTestBase {
             realm.after(engine.io(), 5, TimeUnit.MILLISECONDS, cp -> 2).await(20, TimeUnit.SECONDS))
         .isEqualTo(Outcome.success(2));
     awaitTrue(() -> !hasCadenceThread(engine));
-    realm.close();
+    realm.closeAfterWork();
   }
 
   @Test
@@ -162,7 +162,7 @@ class CadenceTest extends EngineTestBase {
     for (String n : names) {
       assertThat(n.endsWith("-cadence")).isFalse();
     }
-    realm.close();
+    realm.closeAfterWork();
   }
 
   @Test
@@ -190,7 +190,7 @@ class CadenceTest extends EngineTestBase {
           .isInstanceOf(IllegalArgumentException.class);
     }
     assertThat(realm.outstanding()).isEqualTo(0);
-    realm.close();
+    realm.closeAfterWork();
   }
 
   @Test
@@ -212,22 +212,24 @@ class CadenceTest extends EngineTestBase {
             });
     assertThat(failing.recover(engine.io(), (t, cp) -> -1).await(20, TimeUnit.SECONDS))
         .isEqualTo(Outcome.success(-1));
-    realm.close();
+    realm.closeAfterWork();
   }
 
   @Test
-  void closeWaitsForAPendingAfterButCloseAsyncCancelsIt() throws Exception {
+  void closeCancelsAPendingAfterJustLikeCloseAsync() throws Exception {
     Engine engine = engine();
-    Realm waiting = realm(engine);
-    Job<String> job = waiting.after(engine.io(), 60, TimeUnit.MILLISECONDS, cp -> "ran");
-    Thread closer = start("closer", waiting::close);
-    join(closer);
-    assertThat(job.outcomeOrNull()).isEqualTo(Outcome.success("ran"));
+    Realm closing = realm(engine);
+    Job<String> job = closing.after(engine.io(), 1, TimeUnit.HOURS, cp -> "never");
+    assertThat(engine.cadence().pending()).isEqualTo(1);
+    closing.close();
+    assertThat(closing.isClosed()).isTrue();
+    assertThat(job.outcomeOrNull().isCancelled()).isTrue();
+    assertThat(engine.cadence().pending()).isEqualTo(0);
 
     Realm cancelling = realm(engine);
     Job<String> pending = cancelling.after(engine.io(), 1, TimeUnit.HOURS, cp -> "never");
-    Realm.Closing closing = cancelling.closeAsync();
-    assertThat(closing.isClosed()).isTrue();
+    Realm.Closing handle = cancelling.closeAsync();
+    assertThat(handle.isClosed()).isTrue();
     assertThat(pending.outcomeOrNull().isCancelled()).isTrue();
     assertThat(engine.cadence().pending()).isEqualTo(0);
   }
@@ -269,7 +271,7 @@ class CadenceTest extends EngineTestBase {
     Job<Void> latePeriodic = realm.every(engine.io(), 1, 1, TimeUnit.HOURS, cp -> {});
     assertThat(latePeriodic.outcomeOrNull().failureOrNull())
         .isInstanceOf(LaneClosedException.class);
-    realm.close();
+    realm.closeAfterWork();
   }
 
   @Test
@@ -280,7 +282,7 @@ class CadenceTest extends EngineTestBase {
     engine.shutdownNow();
     assertThat(after.outcomeOrNull().failureOrNull()).isInstanceOf(DroppedException.class);
     assertThat(engine.awaitTermination(20, TimeUnit.SECONDS)).isTrue();
-    assertThat(realm.close(20, TimeUnit.SECONDS)).isTrue();
+    assertThat(realm.closeAfterWork(20, TimeUnit.SECONDS)).isTrue();
   }
 
   @Test
@@ -289,7 +291,7 @@ class CadenceTest extends EngineTestBase {
     assertThat(realm.cadence()).isSameAs(Engine.global().cadence());
     Job<String> job = realm.after(Lane.io(), 5, TimeUnit.MILLISECONDS, cp -> "global");
     assertThat(job.await(20, TimeUnit.SECONDS)).isEqualTo(Outcome.success("global"));
-    realm.close();
+    realm.closeAfterWork();
   }
 
   @Test
@@ -310,7 +312,7 @@ class CadenceTest extends EngineTestBase {
       long ranAt = jobs.get(i).await(20, TimeUnit.SECONDS).getOrThrow();
       assertThat(ranAt - expected.get(i)[0] >= expected.get(i)[1] * MS).isTrue();
     }
-    realm.close();
+    realm.closeAfterWork();
   }
 
   @Test
@@ -324,7 +326,7 @@ class CadenceTest extends EngineTestBase {
             .await(20, TimeUnit.SECONDS)
             .getOrThrow();
     assertThat(ranAt - begin >= 40 * MS).isTrue();
-    realm.close();
+    realm.closeAfterWork();
   }
 
   @Test

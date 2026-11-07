@@ -110,7 +110,7 @@ class CadenceStressTest extends EngineTestBase {
     for (Thread t : cancellers) {
       t.join(20_000);
     }
-    assertThat(realm.close(60, TimeUnit.SECONDS)).isTrue();
+    assertThat(realm.closeAfterWork(60, TimeUnit.SECONDS)).isTrue();
     int succeeded = 0;
     int cancelled = 0;
     for (int i = 0; i < n; i++) {
@@ -184,7 +184,7 @@ class CadenceStressTest extends EngineTestBase {
       assertThat(t.isAlive()).isFalse();
     }
     assertThat(engine.awaitTermination(60, TimeUnit.SECONDS)).isTrue();
-    assertThat(realm.close(60, TimeUnit.SECONDS)).isTrue();
+    assertThat(realm.closeAfterWork(60, TimeUnit.SECONDS)).isTrue();
     assertThat(all).hasSize(total);
     for (Job<Integer> job : all) {
       Outcome<Integer> o = job.outcomeOrNull();
@@ -223,7 +223,7 @@ class CadenceStressTest extends EngineTestBase {
       }
       assertThat(started.get() <= atCancel + 1).isTrue();
     }
-    assertThat(realm.close(30, TimeUnit.SECONDS)).isTrue();
+    assertThat(realm.closeAfterWork(30, TimeUnit.SECONDS)).isTrue();
     assertThat(engine.cadence().pending()).isEqualTo(0);
     assertThat(handler.errors()).isEmpty();
   }
@@ -254,7 +254,7 @@ class CadenceStressTest extends EngineTestBase {
               : realm.atRate(engine.io(), 0, period, TimeUnit.MILLISECONDS, action));
     }
     awaitTrue(() -> totalRuns.get() > 2_000);
-    assertThat(realm.close(60, TimeUnit.SECONDS)).isTrue();
+    assertThat(realm.closeAfterWork(60, TimeUnit.SECONDS)).isTrue();
     assertThat(overlap.get()).isFalse();
     for (Job<Void> job : jobs) {
       assertThat(job.outcomeOrNull().isCancelled()).isTrue();
