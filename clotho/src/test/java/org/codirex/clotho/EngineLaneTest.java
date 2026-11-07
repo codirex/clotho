@@ -100,7 +100,7 @@ class EngineLaneTest extends EngineTestBase {
                 return c;
               }));
     }
-    realm.close();
+    realm.closeAfterWork();
     assertThat(max.get() >= 1 && max.get() <= 3).isTrue();
     assertThat(engine.liveThreads() <= 3).isTrue();
     for (Job<Integer> j : jobs) {
@@ -122,7 +122,7 @@ class EngineLaneTest extends EngineTestBase {
       realm.launch(
           lanes[i % lanes.length], Priority.values()[i % 3], cp -> ran[id].incrementAndGet());
     }
-    realm.close();
+    realm.closeAfterWork();
     for (int i = 0; i < n; i++) {
       assertThat(ran[i].get()).isEqualTo(1);
     }
@@ -157,7 +157,7 @@ class EngineLaneTest extends EngineTestBase {
     assertThat(extra.isDone()).isFalse();
     assertThat(engine.liveThreads()).isEqualTo(8);
     release.countDown();
-    realm.close();
+    realm.closeAfterWork();
     assertThat(extra.outcomeOrNull()).isEqualTo(Outcome.success("ninth"));
     assertThat(ninth.get()).isEqualTo(1);
   }
@@ -179,7 +179,7 @@ class EngineLaneTest extends EngineTestBase {
     assertThat(running.await(20, TimeUnit.SECONDS)).isTrue();
     assertThat(engine.liveThreads()).isEqualTo(4);
     release.countDown();
-    realm.close();
+    realm.closeAfterWork();
     awaitTrue(() -> engine.liveThreads() == 0);
     // and the pool starts threads again when work arrives
     Realm second = Realm.open("second");

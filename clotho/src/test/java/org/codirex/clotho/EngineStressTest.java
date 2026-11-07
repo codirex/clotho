@@ -87,7 +87,7 @@ class EngineStressTest extends EngineTestBase {
       t.join(60_000);
       assertThat(t.isAlive()).isFalse();
     }
-    assertThat(realm.close(60, TimeUnit.SECONDS)).isTrue();
+    assertThat(realm.closeAfterWork(60, TimeUnit.SECONDS)).isTrue();
     assertThat(all).hasSize(total);
     int succeeded = 0;
     int rejected = 0;
@@ -221,7 +221,7 @@ class EngineStressTest extends EngineTestBase {
     }
     stop.set(true);
     assertThat(engine.awaitTermination(60, TimeUnit.SECONDS)).isTrue();
-    assertThat(realm.close(60, TimeUnit.SECONDS)).isTrue();
+    assertThat(realm.closeAfterWork(60, TimeUnit.SECONDS)).isTrue();
     for (Thread t : threads) {
       t.join(20_000);
       assertThat(t.isAlive()).isFalse();
@@ -273,7 +273,7 @@ class EngineStressTest extends EngineTestBase {
       assertThat(ran[i].get()).isEqualTo(1);
     }
     assertThat(runners.size() >= 1 && runners.size() <= 4).isTrue();
-    realm.close();
+    realm.closeAfterWork();
   }
 
   @Test
@@ -320,6 +320,6 @@ class EngineStressTest extends EngineTestBase {
     }
     assertThat(outcome).isEqualTo(Outcome.success("low"));
     assertThat(floodWasStillRunning).isTrue();
-    realm.close();
+    realm.closeAfterWork();
   }
 }
