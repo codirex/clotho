@@ -57,7 +57,11 @@ final class PoolLane implements Lane, ManagedLane {
   private final AtomicInteger threads = new AtomicInteger();
   private final AtomicInteger workerIds = new AtomicInteger();
   private final AtomicLong seq = new AtomicLong();
+  private static final long PURGE_RETRY_NANOS = 1_000_000L;
+
   private volatile boolean stopNow;
+  private volatile boolean fruitlessPurge;
+  private volatile long lastPurgeNanos;
 
   PoolLane(
       Engine engine,
@@ -100,6 +104,11 @@ final class PoolLane implements Lane, ManagedLane {
           if (queued.compareAndSet(q, q + 1)) {
             break;
           }
+          continue;
+        }
+        // Tasks of jobs that were cancelled while waiting still hold a slot. Free them before
+        // rejecting or dropping work that is alive.
+        if (purgeSkippable() > 0) {
           continue;
         }
         RejectionPolicy p = limit.policy();
@@ -215,6 +224,28 @@ final class PoolLane implements Lane, ManagedLane {
       engine.threadEnded(t);
       throw e;
     }
+  }
+
+  /**
+   * Removes queued tasks that would do nothing and gives their slots back. A purge that finds
+   * nothing is not repeated for a millisecond, so a lane that is full of live work stays cheap to
+   * reject from; a purge that frees slots pays for itself and is never throttled.
+   */
+  private int purgeSkippable() {
+    long now = engine.nanoTime();
+    if (fruitlessPurge && now - lastPurgeNanos < PURGE_RETRY_NANOS) {
+      return 0;
+    }
+    int removed = shared.purgeSkippable();
+    for (Worker w : workers) {
+      removed += w.local.purgeSkippable();
+    }
+    if (removed > 0) {
+      queued.addAndGet(-removed);
+    }
+    fruitlessPurge = removed == 0;
+    lastPurgeNanos = now;
+    return removed;
   }
 
   /** Removes the task that waited longest in any queue. Returns it (not yet discarded). */

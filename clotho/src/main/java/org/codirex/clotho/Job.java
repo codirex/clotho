@@ -132,7 +132,9 @@ public sealed interface Job<T> permits JobImpl {
   /**
    * Calls {@code completion} on {@code lane} exactly once with the final outcome.
    *
-   * <p>The callback counts as outstanding work of the realm: {@link Realm#close()} waits for it.
+   * <p>The callback counts as outstanding work of the realm: {@link Realm#close()} waits for it
+   * (it is not cancelled, it runs with the outcome of the job, which is {@code Cancelled} if the
+   * realm cancelled the job).
    *
    * @param lane where the callback runs
    * @param completion the callback
