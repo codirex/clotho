@@ -15,6 +15,7 @@
  */
 package org.codirex.clotho;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -58,6 +59,9 @@ final class JobImpl<T> implements Job<T> {
 
   @SuppressWarnings("rawtypes")
   private static final Node DONE = new Node<>(null);
+
+  /** Completions queued by the listener that is running on this thread, if one is. */
+  private static final ThreadLocal<ArrayDeque<Runnable>> DISPATCHING = new ThreadLocal<>();
 
   private final Realm realm;
   private final boolean root;
@@ -154,6 +158,7 @@ final class JobImpl<T> implements Job<T> {
       if (s == Phase.PENDING) {
         Outcome<T> cancelled = Outcome.cancelled();
         if (state.compareAndSet(Phase.PENDING, cancelled)) {
+          work = null; // a cancelled job must not keep what its closure captured alive
           finish(cancelled);
           Runnable hook = cancelHook;
           if (hook != null) {
@@ -272,6 +277,7 @@ final class JobImpl<T> implements Job<T> {
   /** Decides the outcome if the job has not started. Returns true if this call decided it. */
   boolean completeIfPending(Outcome<T> outcome) {
     if (state.compareAndSet(Phase.PENDING, outcome)) {
+      work = null;
       finish(outcome);
       return true;
     }
@@ -284,6 +290,10 @@ final class JobImpl<T> implements Job<T> {
       return;
     }
     this.work = w;
+    if (state.get() != Phase.PENDING) {
+      this.work = null; // cancelled between the check above and the assignment
+      return;
+    }
     try {
       lane.execute(new JobTask(lane), priority);
     } catch (Throwable rejected) {
@@ -315,6 +325,7 @@ final class JobImpl<T> implements Job<T> {
 
   private void runWork() {
     if (!state.compareAndSet(Phase.PENDING, Phase.RUNNING)) {
+      work = null;
       return;
     }
     Work<T> w = work;
@@ -328,10 +339,13 @@ final class JobImpl<T> implements Job<T> {
     }
     T value = null;
     Throwable error = null;
+    Realm.enterWork(realm);
     try {
       value = w.run(checkpoint);
     } catch (Throwable t) {
       error = t;
+    } finally {
+      Realm.exitWork();
     }
     synchronized (lock) {
       runner = null;
@@ -437,15 +451,54 @@ final class JobImpl<T> implements Job<T> {
     }
     @SuppressWarnings("unchecked")
     Node<T> head = listeners.getAndSet(DONE);
-    List<Inline<T>> ordered = new ArrayList<>();
-    for (Node<T> n = head; n != null; n = n.next) {
-      ordered.add(n.listener);
+    dispatch(head, outcome);
+  }
+
+  /**
+   * Runs the listeners of this job, then releases it from its realm.
+   *
+   * <p>A listener often decides another job (a dependent, a zip, a race), whose own listeners would
+   * run inside this call and so on down a chain. Recursing would overflow the stack on a chain of a
+   * few thousand links, and the jobs past the overflow would never complete. Instead a completion
+   * that starts while the thread is already running listeners is queued and run by the outermost
+   * call in a loop, so the depth stays constant. The queued work runs after the current listener
+   * returns, not inside it.
+   */
+  private void dispatch(Node<T> head, Outcome<T> outcome) {
+    ArrayDeque<Runnable> queue = DISPATCHING.get();
+    if (queue != null) {
+      queue.add(() -> notifyAndRelease(head, outcome));
+      return;
     }
-    Collections.reverse(ordered);
-    for (Inline<T> listener : ordered) {
-      runListener(listener, outcome);
+    queue = new ArrayDeque<>();
+    DISPATCHING.set(queue);
+    try {
+      notifyAndRelease(head, outcome);
+      Runnable next;
+      while ((next = queue.poll()) != null) {
+        next.run();
+      }
+    } finally {
+      DISPATCHING.remove();
     }
-    realm.untrack(this);
+  }
+
+  private void notifyAndRelease(Node<T> head, Outcome<T> outcome) {
+    if (head != null) {
+      List<Inline<T>> ordered = new ArrayList<>();
+      for (Node<T> n = head; n != null; n = n.next) {
+        ordered.add(n.listener);
+      }
+      Collections.reverse(ordered);
+      for (Inline<T> listener : ordered) {
+        runListener(listener, outcome);
+      }
+    }
+    try {
+      realm.untrack(this);
+    } catch (Throwable t) {
+      realm.report(t);
+    }
   }
 
   private void runListener(Inline<T> listener, Outcome<T> outcome) {
@@ -468,7 +521,7 @@ final class JobImpl<T> implements Job<T> {
   }
 
   /** The task a lane runs for this job. If the lane discards it, the job fails with the reason. */
-  private final class JobTask implements Runnable, Lane.Discardable {
+  private final class JobTask implements Runnable, Lane.Discardable, Skippable {
     private final Lane lane;
 
     JobTask(Lane lane) {
@@ -478,6 +531,11 @@ final class JobImpl<T> implements Job<T> {
     @Override
     public void run() {
       LaneContext.runIn(lane, JobImpl.this::runWork);
+    }
+
+    @Override
+    public boolean isSkippable() {
+      return state.get() instanceof Outcome<?>;
     }
 
     @Override
@@ -511,11 +569,13 @@ final class JobImpl<T> implements Job<T> {
       LaneContext.runIn(
           lane,
           () -> {
+            Realm.enterWork(realm);
             try {
               completion.accept(outcome);
             } catch (Throwable t) {
               realm.report(t);
             } finally {
+              Realm.exitWork();
               release.run();
             }
           });
