@@ -52,7 +52,7 @@ class EngineOrderedLanesTest extends EngineTestBase {
             return id;
           });
     }
-    realm.close();
+    realm.closeAfterWork();
     assertThat(maxInside.get()).isEqualTo(1);
     assertThat(counter[0]).isEqualTo(n);
     for (int i = 0; i < n; i++) {
@@ -101,7 +101,7 @@ class EngineOrderedLanesTest extends EngineTestBase {
     for (Thread t : threads) {
       t.join(20_000);
     }
-    realm.close();
+    realm.closeAfterWork();
     assertThat(maxInside.get()).isEqualTo(1);
     assertThat(seen).hasSize(producers * each);
     int[] next = new int[producers];
@@ -124,7 +124,7 @@ class EngineOrderedLanesTest extends EngineTestBase {
       r.launch(lane, Priority.HIGH, cp -> order.add("high"));
       r.launch(lane, Priority.NORMAL, cp -> order.add("normal"));
       gate.open();
-      r.close();
+      r.closeAfterWork();
       assertThat(order).containsExactly("low", "high", "normal");
     }
   }
@@ -161,7 +161,7 @@ class EngineOrderedLanesTest extends EngineTestBase {
         });
     gate.open();
     assertThat(allDone.await(20, TimeUnit.SECONDS)).isTrue();
-    realm.close();
+    realm.closeAfterWork();
     assertThat(order).containsExactly("A", "C", "B");
   }
 
@@ -194,7 +194,7 @@ class EngineOrderedLanesTest extends EngineTestBase {
             return id;
           });
     }
-    realm.close();
+    realm.closeAfterWork();
     assertThat(engine.liveThreads()).isEqualTo(1);
     Thread owner = threads.get(0);
     assertThat(owner.getName().contains("single-worker")).isTrue();

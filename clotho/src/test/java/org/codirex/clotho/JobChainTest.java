@@ -229,7 +229,7 @@ class JobChainTest {
   void deriveOnClosedRealmIsRejected() throws Exception {
     Job<Integer> a = realm.launch(lane, cp -> 1);
     lane.runAll();
-    realm.close();
+    realm.closeAfterWork();
     assertThatThrownBy(() -> a.then(lane, (v, cp) -> v)).isInstanceOf(RealmClosedException.class);
     assertThatThrownBy(() -> a.recover(lane, (t, cp) -> 0))
         .isInstanceOf(RealmClosedException.class);
@@ -243,5 +243,48 @@ class JobChainTest {
     assertThat(a.isDone()).isTrue();
     assertThat(a.await()).isEqualTo(Outcome.success(3));
     assertThat(Lane.direct()).isSameAs(Lane.direct());
+  }
+
+  @Test
+  void aVeryLongChainOfSkippedDependentsCompletesWithoutOverflowingTheStack() throws Exception {
+    IOException boom = new IOException("boom");
+    Job<Integer> root =
+        realm.launch(
+            lane,
+            cp -> {
+              throw boom;
+            });
+    Job<Integer> last = root;
+    for (int i = 0; i < 50_000; i++) {
+      last = last.then(lane, (v, cp) -> v + 1);
+    }
+    lane.runAll();
+    assertThat(last.await().failureOrNull()).isSameAs(boom);
+    assertThat(realm.outstanding()).isEqualTo(0);
+  }
+
+  @Test
+  void cancellingTheRootOfAVeryLongChainCancelsEveryDependentWithoutOverflowingTheStack()
+      throws Exception {
+    Job<Integer> root = realm.launch(lane, cp -> 1);
+    Job<Integer> last = root;
+    for (int i = 0; i < 50_000; i++) {
+      last = last.then(lane, (v, cp) -> v + 1);
+    }
+    assertThat(root.cancel()).isTrue();
+    assertThat(last.await().isCancelled()).isTrue();
+    assertThat(realm.outstanding()).isEqualTo(0);
+  }
+
+  @Test
+  void aVeryLongChainOnTheDirectLaneRunsWithoutOverflowingTheStack() throws Exception {
+    Job<Integer> root = realm.launch(lane, cp -> 0);
+    Job<Integer> last = root;
+    for (int i = 0; i < 50_000; i++) {
+      last = last.then(Lane.direct(), (v, cp) -> v + 1);
+    }
+    lane.runAll();
+    assertThat(last.await()).isEqualTo(Outcome.success(50_000));
+    assertThat(realm.outstanding()).isEqualTo(0);
   }
 }

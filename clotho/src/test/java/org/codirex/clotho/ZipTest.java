@@ -222,7 +222,7 @@ class ZipTest {
     Job<String> a = input("a");
     Job<String> b = input("b");
     inputs.runAll();
-    realm.close();
+    realm.closeAfterWork();
     assertThatThrownBy(() -> zip(a, b, Ownership.OWNED)).isInstanceOf(RealmClosedException.class);
   }
 }
