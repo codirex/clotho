@@ -116,6 +116,20 @@ final class RankedQueue {
     return oldest;
   }
 
+  /** Removes every task that would do nothing when run. Returns how many were removed. */
+  synchronized int purgeSkippable() {
+    int removed = 0;
+    for (ArrayDeque<EngineTask> level : levels) {
+      for (java.util.Iterator<EngineTask> it = level.iterator(); it.hasNext(); ) {
+        if (Skippable.test(it.next().runnable)) {
+          it.remove();
+          removed++;
+        }
+      }
+    }
+    return removed;
+  }
+
   /** Removes this exact task. Returns false if it is not queued. */
   synchronized boolean remove(EngineTask task) {
     ArrayDeque<EngineTask> level = levels.get(task.priority.level());

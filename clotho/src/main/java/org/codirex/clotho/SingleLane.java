@@ -58,6 +58,9 @@ final class SingleLane implements Lane, ManagedLane {
       }
       int cap = limit.capacity();
       if (cap > 0 && queue.size() >= cap) {
+        queue.removeIf(Skippable::test); // cancelled jobs still hold a slot; free them first
+      }
+      if (cap > 0 && queue.size() >= cap) {
         if (limit.policy() == RejectionPolicy.REJECT) {
           throw new RejectedExecutionException(this + " queue is full (" + cap + ")");
         }
