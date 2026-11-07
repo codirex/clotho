@@ -15,6 +15,7 @@
  */
 package org.codirex.clotho;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -240,13 +241,13 @@ public final class Realm implements AutoCloseable {
   /**
    * Runs {@code work} on {@code lane} once, after a delay.
    *
-   * <p>The job is pending while it waits, and it belongs to the realm: {@link #close()} waits for
-   * it to run, {@link #closeAsync()}, {@link #cancel()} and the timeout of {@link #close(long,
-   * TimeUnit)} cancel it and remove its timer before they return (see {@code docs/CADENCE.md} for
-   * the one race, with the creation of the same timer by another thread). A delay of zero or less
-   * is the same as {@link #launch(Lane, Work) launch}. The work never starts before the delay
-   * elapsed; it starts after it, late by up to one tick of the cadence plus the time the lane needs
-   * (see {@code docs/CADENCE.md}: this is not real-time).
+   * <p>The job is pending while it waits, and it belongs to the realm: {@link #close()}, {@link
+   * #close(long, TimeUnit)}, {@link #closeAsync()} and {@link #cancel()} cancel it and remove its
+   * timer before they return (see {@code docs/CADENCE.md} for the one race, with the creation of
+   * the same timer by another thread). To let it run, {@link Job#await() await} it before closing.
+   * A delay of zero or less is the same as {@link #launch(Lane, Work) launch}. The work never
+   * starts before the delay elapsed; it starts after it, late by up to one tick of the cadence plus
+   * the time the lane needs (see {@code docs/CADENCE.md}: this is not real-time).
    *
    * <p>If the cadence was shut down the job ends at once as {@link Outcome.Failure} with a {@link
    * LaneClosedException}.
@@ -353,8 +354,8 @@ public final class Realm implements AutoCloseable {
    *       already started continues until it returns or notices its {@link Checkpoint}; the job is
    *       not done before that.
    *   <li>{@link #close()}, {@link #closeAsync()} and {@link #close(long, TimeUnit)} cancel
-   *       periodic jobs of the realm automatically (a running run is not interrupted by the first
-   *       two).
+   *       periodic jobs of the realm automatically (a running run is not interrupted until the
+   *       timeout of {@code close(long, TimeUnit)} runs out).
    * </ul>
    *
    * @param lane where the action runs; a lane that runs tasks inline is refused
@@ -673,18 +674,31 @@ public final class Realm implements AutoCloseable {
   }
 
   /**
-   * Closes the realm and waits for all work to finish, without cancelling anything.
+   * Closes the realm: cancels all of its work and waits until every job has ended.
    *
-   * <p>Throws {@link BlockingNotAllowedException} if called from a lane that forbids blocking. New
-   * work is rejected as soon as this is called. If the calling thread is interrupted while waiting,
-   * the realm is cancelled (without interrupting job threads), the wait continues, and the
-   * interrupt flag is restored on return. Do not call this from inside a job of the same realm. If
-   * a job never ends, this never returns; use {@link #close(long, TimeUnit)} to bound the wait.
+   * <p>In order, this call rejects new work, requests cancellation of every job in the realm and of
+   * every job launched afterwards (as {@link #cancel()} does, no thread is interrupted), and blocks
+   * until the realm is {@code CLOSED}. This is what makes {@code try (Realm realm = ...)} safe:
+   * when the block ends, for any reason, nothing launched in it keeps running. To let work finish
+   * instead, {@link Job#await() await} the jobs you care about before the block ends; then {@code
+   * close()} finds nothing left to cancel.
+   *
+   * <p>Cancellation is cooperative. A job that ignores it keeps this call waiting, so use {@link
+   * #close(long, TimeUnit)} to bound the wait. If the calling thread is interrupted while waiting,
+   * the threads running the jobs are interrupted too, the wait continues, and the interrupt flag is
+   * restored on return.
+   *
+   * @throws BlockingNotAllowedException if called from a lane that forbids blocking; use {@link
+   *     #closeAsync()} there
+   * @throws IllegalStateException if called from inside a job or completion callback of this same
+   *     realm, which would wait for itself; use {@link #closeAsync()} there
    */
   @Override
   public void close() {
     LaneContext.checkMayBlock();
+    checkNotInsideOwnWork("close()");
     beginClose();
+    cancelAllSticky(false);
     boolean interrupted = false;
     for (; ; ) {
       try {
@@ -693,7 +707,7 @@ public final class Realm implements AutoCloseable {
       } catch (InterruptedException e) {
         if (!interrupted) {
           interrupted = true;
-          cancelAllSticky(false);
+          cancelAllSticky(true);
         }
       }
     }
@@ -703,32 +717,73 @@ public final class Realm implements AutoCloseable {
   }
 
   /**
-   * Closes the realm and waits at most {@code timeout} for all work to finish.
+   * Closes the realm like {@link #close()} but lets the outstanding work finish instead of
+   * cancelling it (periodic jobs are still cancelled, as they never end by themselves). Not part of
+   * the public API: it exists so the tests can wait for work they have already scheduled.
+   */
+  void closeAfterWork() {
+    LaneContext.checkMayBlock();
+    checkNotInsideOwnWork("closeAfterWork()");
+    beginClose();
+    boolean interrupted = false;
+    for (; ; ) {
+      try {
+        closed.await();
+        break;
+      } catch (InterruptedException e) {
+        interrupted = true;
+      }
+    }
+    if (interrupted) {
+      Thread.currentThread().interrupt();
+    }
+  }
+
+  /** Timed variant of {@link #closeAfterWork()}: escalates and reports leaks on timeout. */
+  boolean closeAfterWork(long timeout, TimeUnit unit) throws InterruptedException {
+    LaneContext.checkMayBlock();
+    checkNotInsideOwnWork("closeAfterWork(long, TimeUnit)");
+    beginClose();
+    if (closed.await(timeout, unit)) {
+      return true;
+    }
+    cancelAllSticky(true);
+    for (JobImpl<?> job : jobs) {
+      if (!job.isDone() && job.markLeakReported()) {
+        report(
+            new LeakedJobException(
+                "job still running after close timeout in realm '" + name + "'"));
+      }
+    }
+    return isClosed();
+  }
+
+  /**
+   * Closes the realm and waits at most {@code timeout} for its work to end.
    *
-   * <p>When the time runs out this call, in order: cancels every remaining job and every job
-   * launched afterwards, interrupts the threads running them (see {@link #cancel(boolean)}),
-   * reports each still-running job once to the {@link UncaughtHandler} as a {@link
-   * LeakedJobException}, and returns {@code false}. Returning {@code false} does <em>not</em> mean
-   * the work stopped: Java cannot stop code that ignores cancellation and interrupts. The realm
-   * stays {@code CLOSING} and becomes {@code CLOSED} on its own when the last job ends. Calling
-   * this again re-delivers the cancellation and interrupt but never reports the same job twice.
+   * <p>Like {@link #close()} this rejects new work and requests cancellation of every job, then
+   * waits up to {@code timeout} for the jobs to react. When the time runs out it interrupts the
+   * threads running the remaining jobs (see {@link #cancel(boolean)}), reports each job that is
+   * still running once to the {@link UncaughtHandler} as a {@link LeakedJobException}, and returns
+   * {@code false}. Returning {@code false} does <em>not</em> mean the work stopped: Java cannot
+   * stop code that ignores cancellation and interrupts. The realm stays {@code CLOSING} and
+   * becomes {@code CLOSED} on its own when the last job ends. Calling this again re-delivers the
+   * cancellation and interrupt but never reports the same job twice.
    *
    * @param timeout the maximum time to wait
    * @param unit the unit of {@code timeout}
    * @return {@code true} if the realm is closed, {@code false} if work was still outstanding
-   * @throws InterruptedException if interrupted while waiting; the realm is then cancelled (without
-   *     interrupting job threads) and keeps closing
+   * @throws InterruptedException if interrupted while waiting; the realm keeps closing
+   * @throws IllegalStateException if called from inside a job or completion callback of this same
+   *     realm
    */
   public boolean close(long timeout, TimeUnit unit) throws InterruptedException {
     LaneContext.checkMayBlock();
+    checkNotInsideOwnWork("close(long, TimeUnit)");
     beginClose();
-    try {
-      if (closed.await(timeout, unit)) {
-        return true;
-      }
-    } catch (InterruptedException e) {
-      cancelAllSticky(false);
-      throw e;
+    cancelAllSticky(false);
+    if (closed.await(timeout, unit)) {
+      return true;
     }
     cancelAllSticky(true);
     for (JobImpl<?> job : jobs) {
@@ -743,18 +798,18 @@ public final class Realm implements AutoCloseable {
 
   /**
    * Starts closing the realm and returns at once, without waiting. Safe to call from any thread,
-   * including the main thread and lanes that forbid blocking.
+   * including the main thread, lanes that forbid blocking, and jobs of this realm.
    *
-   * <p>It does, in order: rejects new work (as {@link #close()} does), requests cancellation of
-   * every job currently in the realm (as {@link #cancel()} does, no thread interrupts), and returns
-   * a {@link Closing} that tells when the closing is really complete. Calling it again returns the
+   * <p>It does the same first two steps as {@link #close()}: rejects new work and requests
+   * cancellation of every job currently in the realm (no thread interrupts). It then returns a
+   * {@link Closing} that tells when the closing is really complete. Calling it again returns the
    * same object.
    *
    * <p>Returning says nothing about the jobs: they stop only when their work cooperates. A job that
    * ignores cancellation keeps the realm {@code CLOSING}. Nothing is reported to the {@link
    * UncaughtHandler} and no thread is interrupted; to bound and escalate the closing call {@link
-   * #close(long, TimeUnit)} from a thread that may block (it keeps its phase 2 meaning, also after
-   * {@code closeAsync()}), or {@link #cancel(boolean) cancel(true)}.
+   * #close(long, TimeUnit)} from a thread that may block (it also works after {@code
+   * closeAsync()}), or {@link #cancel(boolean) cancel(true)}.
    *
    * @return the handle that observes the end of the closing
    */
@@ -946,6 +1001,40 @@ public final class Realm implements AutoCloseable {
     } catch (Throwable inner) {
       inner.addSuppressed(error);
       inner.printStackTrace();
+    }
+  }
+
+  private static final ThreadLocal<ArrayDeque<Realm>> RUNNING = new ThreadLocal<>();
+
+  /** Marks the current thread as running a job or callback of {@code realm}. */
+  static void enterWork(Realm realm) {
+    ArrayDeque<Realm> stack = RUNNING.get();
+    if (stack == null) {
+      stack = new ArrayDeque<>(2);
+      RUNNING.set(stack);
+    }
+    stack.push(realm);
+  }
+
+  /** Undoes the matching {@link #enterWork}. */
+  static void exitWork() {
+    ArrayDeque<Realm> stack = RUNNING.get();
+    if (stack != null) {
+      stack.pop();
+      if (stack.isEmpty()) {
+        RUNNING.remove();
+      }
+    }
+  }
+
+  private void checkNotInsideOwnWork(String operation) {
+    ArrayDeque<Realm> stack = RUNNING.get();
+    if (stack != null && stack.contains(this)) {
+      throw new IllegalStateException(
+          operation
+              + " was called from inside a job of realm '"
+              + name
+              + "', which would wait for itself; use closeAsync() instead");
     }
   }
 
