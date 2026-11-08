@@ -1,4 +1,4 @@
-# Testing (phase 6)
+# Testing
 
 Each tool below proves something different. None replaces another.
 
@@ -11,9 +11,12 @@ Each tool below proves something different. None replaces another.
 | Robolectric | `clotho-android/src/test` | the Android glue on a simulated looper | behaviour on a real device |
 | Instrumented | `clotho-android/src/androidTest` | the real looper, the real manifest merge, real androidx lifecycle | other devices and versions |
 
+CI runs the unit, real-thread, stress and Robolectric tests. jcstress and the instrumented tests are
+not part of CI's normal run (jcstress has a manual workflow).
+
 ## 1. `clotho-test`: test your own code
 
-Depend on it from your tests (`testImplementation("org.codirex.clotho:clotho-test")`). It keeps
+Depend on it from your tests (`testImplementation("org.codirex.clotho:clotho-test:<version>")`). It keeps
 asynchronous tests free of threads, sleeps and flakiness.
 
 - `TestClock`: a clock that only moves when you move it (`advance`, `set`). Never goes backwards.
@@ -40,8 +43,8 @@ skip missed slots). A task may advance the clock itself to simulate that it take
 The manual timers it uses are in the core: `Engine.Builder.manualTimers()`, `Cadence.runDue()`,
 `Cadence.nextDueNanos()`. With them no timer thread exists; timers fire only when `runDue()` is called.
 Because the clock is fake, these tests are exact, which is why they found a real fixed-rate bug (a
-slot run twice when its run ended at the instant of the slot, fixed in this phase). They do not test
-the timer thread: `CadenceTest` and `PeriodicTest` do.
+slot run twice when its run ended at the instant of the slot), since fixed. They do not test the timer
+thread: `CadenceTest` and `PeriodicTest` do.
 
 ## 2. jcstress (`clotho-jcstress`)
 
@@ -71,10 +74,9 @@ Run it (it takes minutes and wants real cores, so it is not part of `build` or `
 ./gradlew -PwithJcstress :clotho-jcstress:jcstress -PjcstressMode=default
 ```
 
-The module is included in the build only with `-PwithJcstress` (see `settings.gradle.kts`), so an
-unverified integration cannot break the normal build. The run writes its report under `results/`. The
-Gradle task and the `-m` mode names follow jcstress's command line; check them with `--help` of
-`org.openjdk.jcstress.Main` if your version differs. There is also a manual CI job (workflow dispatch).
+The module is included in the build only with `-PwithJcstress` (see `settings.gradle.kts`), so it
+never slows the normal build. The run writes its report under `results/`. There is also a manual CI
+job (workflow dispatch).
 
 The tests live in the package `org.codirex.clotho` (split package, classpath only) because they
 touch package-private classes (`TimerWheel`, `RankedQueue`). Where the jcstress annotation `Outcome`
@@ -90,29 +92,11 @@ clashes with `org.codirex.clotho.Outcome`, the tests spell the library type in f
 run on the real main looper in order, `immediate()`, an I/O to main round trip, blocking refused on
 the main thread. `AndroidRealmsInstrumentedTest`: binding and destroy with the real `LifecycleRegistry`
 (which enforces the main thread itself), and a destroy that returns at once while a job is still
-running. Versions: androidx.test core 1.7.0, ext-junit 1.3.0, runner 1.7.0 (stable on the AndroidX
-release page).
+running.
 
-## 4. What was run when this phase was delivered
+## 4. Not covered
 
-Run in the authoring sandbox (one CPU core, no Gradle, no Android SDK, JUnit and AssertJ replaced by
-small stubs):
-
-- core tests (270), `clotho-test` tests (26): pass, repeated;
-- the ten jcstress scenarios: compiled against hand-written stubs of the jcstress annotations and result
-  classes, and run 150,000 iterations each in a small multi-thread harness written for this check. Both
-  allowed outcomes were observed in every scenario that has two, and no forbidden outcome. **That is
-  not a jcstress run**: the harness has none of its memory-model machinery, and the sandbox has one
-  core;
-- the instrumented tests: compiled against stubs only. They were never executed.
-
-Not run: Gradle, Spotless, animal-sniffer, lint, JaCoCo, Robolectric, jcstress itself, the instrumented
-tests, anything on a multi-core machine.
-
-## 5. Not done in this phase
-
-- Coverage gates (JaCoCo minimums): the thresholds must come from a measured report; they are set once
-  you send the numbers of `jacocoTestReport`.
-- Custom lint rules and mutation testing: not started.
+- Coverage gates: JaCoCo reports are produced, but no minimum is enforced yet.
+- Custom lint rules and mutation testing: none.
 - jcstress for the whole engine (`PoolLane`, `SerialLane`): too coarse for jcstress; covered by the
   stress tests only.

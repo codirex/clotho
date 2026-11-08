@@ -1,7 +1,7 @@
-# Cadence: timers and `Cell` (phase 5)
+# Cadence: timers and `Cell`
 
-Every rule has tests: `TimerWheelTest`, `CadenceMathTest` (fake clock, no threads), `CadenceTest`,
-`PeriodicTest` (real threads, real clock), `CadenceStressTest` (concurrency), `CellTest`.
+Tests: `TimerWheelTest`, `CadenceMathTest` (fake clock, no threads), `CadenceTest`, `PeriodicTest`
+(real threads, real clock), `CadenceStressTest` (concurrency), `ManualCadenceTest`, `CellTest`.
 
 ## 1. API
 
@@ -109,7 +109,7 @@ No job is left pending: every path above ends the job or plans the next run.
 |---|---|---|---|
 | `close()` | waited for: it runs at its time (can take as long as its delay) | cancelled automatically | waited for, not interrupted |
 | `closeAsync()` | cancelled, timer removed | cancelled | cancel requested, not interrupted; returns at once |
-| `close(timeout)` | cancelled (with the cancel of the timeout) | cancelled at the start | interrupted after the timeout, leaks reported as in phase 2 |
+| `close(timeout)` | cancelled (with the cancel of the timeout) | cancelled at the start | interrupted after the timeout, leaks reported as in [SEMANTICS.md](SEMANTICS.md) section 6 |
 
 `isClosed()`/`Closing.onClosed` are true only when no job (including a pending `after` and a running
 execution) and no callback is outstanding: a pending timer does not count as closed, a cancelled one
@@ -134,7 +134,7 @@ cadence is never shut down. `awaitTermination` also waits for the timer thread.
 - **`null`** is a legal value everywhere; functions themselves must not be `null`.
 - **`compareAndSet`** compares with `equals` (works for boxed numbers); `compareAndSetSame` compares
   by reference like `AtomicReference`.
-- Observers are deferred to `Flow` (phase 8).
+- Observers are planned together with `Flow`, after the first stable release.
 
 ## 11. What the tests prove and what they do not
 
@@ -146,7 +146,7 @@ cadence is never shut down. `awaitTermination` also waits for the timer thread.
 - Stress tests (thousands of timers with concurrent cancellation, engine shutdown during timer
   creation, cancel races, hundreds of periodic jobs, wheel fire-versus-cancel) show that the
   invariants held in the interleavings that occurred. They do not prove absence of other races;
-  jcstress (phase 6) is the specialised tool. A single-core machine exercises fewer parallel
+  jcstress is the specialised tool. A single-core machine exercises fewer parallel
   interleavings.
 
 ## 12. Testing time-dependent code

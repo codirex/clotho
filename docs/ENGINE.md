@@ -1,6 +1,6 @@
-# Engine and lanes (phase 3)
+# Engine and lanes
 
-Every rule here has tests in `clotho/src/test` (`Engine*Test`, `RankedQueueTest`). Behaviour of jobs
+Tests for these rules are in `clotho/src/test` (`Engine*Test`, `RankedQueueTest`). Behaviour of jobs
 themselves is in [SEMANTICS.md](SEMANTICS.md).
 
 ## 1. Who owns the threads
@@ -103,8 +103,8 @@ also discard its pending timers and end its thread.
   | on a `FORBIDDEN` lane | rejected | runs inline |
   | on an `ALLOWED` lane | runs inline | runs inline |
 
-  Unknown callers are never trusted. Once a main lane is installed (phase 4) the main thread is
-  known: it is **never** used to run pool work inline, whichever lane it came from (see ANDROID.md).
+  Unknown callers are never trusted. Once a main lane is installed the main thread is known: it is
+  **never** used to run pool work inline, whichever lane it came from (see ANDROID.md).
   The inline run uses the policy of the target lane. Rejection throws like `REJECT`.
 - Serial and single lanes accept `REJECT` and `DROP_OLDEST`; `CALLER_RUNS` would break their order and
   is refused at creation.
@@ -116,7 +116,7 @@ Lock-protected queues (not lock-free): a shared queue for outside submissions, a
 worker for tasks submitted from a worker of the same lane, stealing from other workers when both are
 empty. Idle workers park on a stack; a submitter claims one and unparks it, or starts a worker below
 the maximum, so a wake-up cannot be lost. Replacing the queues with lock-free deques is a later
-optimisation to be justified by the benchmarks (phase 7) and jcstress (phase 6).
+optimisation, to be justified by the benchmarks and jcstress.
 
 ## 7. What the stress tests prove, and what they do not
 
@@ -128,4 +128,4 @@ has nothing outstanding afterwards; no engine-owned thread survives termination.
 They show that these invariants held in the interleavings that occurred during the runs, on the
 machines that ran them. They do not prove that no other interleaving breaks them, and a single-core
 machine exercises fewer parallel interleavings. Proof-level checks of the critical structures belong
-to jcstress (phase 6); the stress tests do not replace them.
+to jcstress; the stress tests do not replace them.

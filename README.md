@@ -84,7 +84,7 @@ try (Realm realm = Realm.open("checkout")) {
 
 Clotho is **not** a wrapper around `ExecutorService`. It has its own work-stealing pool, its own
 timer wheel and its own job state machine, and it specifies the behaviour in writing
-([docs/SEMANTICS.md](docs/SEMANTICS.md)) with at least one test per rule.
+([docs/SEMANTICS.md](docs/SEMANTICS.md)) with tests for the rules.
 
 ---
 
@@ -97,7 +97,6 @@ timer wheel and its own job state machine, and it specifies the behaviour in wri
 | `Realm` | Lifetime scope that owns jobs. Closing it cancels them |
 | `Lane` | *Where* work runs: Compute, Io, Main, Serial, Single, Direct |
 | `Engine` | Owns the threads behind the lanes and the timer service |
-| `Worker` | A thread owned by a lane |
 | `Checkpoint` | Passed to your work so it can observe cancellation |
 | `Cadence` | Delays and repetition (the timer service) |
 | `Cell<T>` | Atomically updatable protected value |
@@ -193,7 +192,7 @@ Realm custom = Realm.builder("name")
 | `race(jobs, ownership)` | First success wins |
 | `cancel()` / `cancel(interrupt)` | Cancel every job of the realm |
 | `close()` / `close(timeout, unit)` / `closeAsync()` | Three ways to close |
-| `failure()`, `isClosing()`, `isClosed()`, `outstanding()`, `name()`, `policy()` | Inspection |
+| `failure()`, `isClosing()`, `isClosed()`, `outstanding()`, `name()`, `policy()`, `cadence()` | Inspection |
 
 **Membership is total.** Every job (including the result of `then`, `zip`, `race`, and the losers of a
 race) belongs to exactly one realm for its whole life. A realm is one atomic counter of outstanding
@@ -634,9 +633,9 @@ These are enforced where possible by the build.
 7. Every public type has complete Javadoc and a test written before the implementation.
 8. `-Xlint:all -Werror`; string concatenation compiled inline because `StringConcatFactory` does not
    exist on API 24.
-9. After the first release, `japicmp` checks binary compatibility against the published baseline.
 
-More: [docs/DESIGN.md](docs/DESIGN.md).
+Not set up yet: automatic binary-compatibility checking against the published baseline (planned
+for the first stable release).
 
 ---
 
@@ -656,11 +655,11 @@ fire vs cancel and schedule vs advance, realm launch vs close, race success vs c
 take-once, periodic cancel vs tick.
 
 Build gates: Spotless (google-java-format + license header), animal-sniffer (API 24), `-Xlint:all -Werror`,
-strict Javadoc (`-Xdoclint:all`), JaCoCo.
+strict Javadoc (`-Xdoclint:all`). JaCoCo produces a coverage report.
 
 **Honest limits.** Stress tests do not prove the absence of other interleavings. Coverage gates
-and a recorded benchmark run are still open. See [docs/TESTING.md](docs/TESTING.md) for exactly what
-was and was not executed at each phase.
+and a recorded benchmark run are still open. See [docs/TESTING.md](docs/TESTING.md) for what each
+kind of test proves and what is not covered.
 
 CI (GitHub Actions) runs the JVM modules on JDK 17 and 21, the Android module and a publishing dry run on
 every push and pull request. jcstress and benchmarks are manual workflows.
@@ -704,7 +703,7 @@ clotho-framework/
 ├── clotho-bench/      JMH benchmarks             (opt-in: -PwithBench)
 ├── app/               Sample Android app
 ├── build-logic/       Gradle convention plugins (library, publish, spotless, java-base)
-├── docs/              SEMANTICS, ENGINE, CADENCE, ANDROID, TESTING, DESIGN, BENCHMARKS, ROADMAP
+├── docs/              SEMANTICS, ENGINE, CADENCE, ANDROID, TESTING, BENCHMARKS, CONTRIBUTING
 └── scripts/           jmh_to_md.py
 ```
 
@@ -715,9 +714,8 @@ clotho-framework/
 | [CADENCE.md](docs/CADENCE.md) | Timers and `Cell` |
 | [ANDROID.md](docs/ANDROID.md) | Main thread, lifecycle, startup, R8 |
 | [TESTING.md](docs/TESTING.md) | Test tools and what each kind of test proves |
-| [DESIGN.md](docs/DESIGN.md) | Design decisions and API rules |
 | [BENCHMARKS.md](docs/BENCHMARKS.md) | How to run and read the benchmarks |
-| [ROADMAP.md](docs/ROADMAP.md) | Phases |
+| [CONTRIBUTING.md](docs/CONTRIBUTING.md) | Contribution rules and the release process |
 | [CHANGES.md](CHANGES.md) | Changelog (every public API change is listed) |
 
 ---
@@ -725,7 +723,6 @@ clotho-framework/
 ## Building from source
 
 ```bash
-gradle wrapper --gradle-version 9.6.1   # first time only
 ./gradlew spotlessApply                  # format + license headers
 ./gradlew build                          # tests, Spotless, animal-sniffer, Javadoc
 ```
@@ -741,17 +738,14 @@ Building the `app` sample needs Android SDK 37. Optional modules:
 
 ## Roadmap
 
-| # | Phase | State |
-|---|---|---|
-| 1 | Foundation: build, quality gates, CI | done |
-| 2 | Core: `Job`, `Outcome`, `Realm`, cancellation, `then/recover/zip/race` | done |
-| 3 | Engine: work-stealing pool, lanes, priorities, bounded queues | done |
-| 4 | Android: main lane, lifecycle | done |
-| 5 | Cadence: timer wheel, `after/every/atRate`, `Cell` | done |
-| 6 | Testing: `clotho-test`, stress, jcstress, instrumented | done |
-| 7 | Benchmarks, CI, Maven Central | delivered; recorded run, coverage gates and BOM still open |
-| 8 | **Flow** (value streams) | after the first stable release |
-| later | `clotho-ktx` (optional Kotlin extensions) | planned |
+**Done:** core (`Realm`, `Job`, `Outcome`), engine (work-stealing pool, lanes, priorities, bounded
+queues), Android (main lane, lifecycle realms), timers (`Cadence`) and `Cell`, test tools
+(`clotho-test`), stress tests and jcstress scenarios, JMH benchmarks, CI and Maven Central publishing.
+
+**Still open before a stable release:** a recorded benchmark run, coverage gates, a BOM.
+
+**Later:** `Flow` (value streams, after the first stable release); `clotho-ktx` (optional Kotlin
+extensions).
 
 ---
 
