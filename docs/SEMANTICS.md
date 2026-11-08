@@ -1,6 +1,6 @@
-# Semantics (phase 2)
+# Semantics
 
-These rules are the contract. Every rule below has at least one test (`clotho/src/test`).
+These rules are the contract. Tests for them are in `clotho/src/test`.
 
 ## 1. Job states and the single decision point
 
@@ -93,10 +93,10 @@ so chains built before closing still complete.
   also across repeated calls) as `LeakedJobException`, (4) returns `false`. The realm stays
   `CLOSING` and becomes `CLOSED` by itself when the last job ends.
   If interrupted while waiting it cancels (no thread interrupts) and throws `InterruptedException`.
-- **What is not promised:** `false` does not mean the work stopped. Clotho owns no threads in this
-  phase, so closing leaves no realm-owned thread behind, but code that ignores cancellation and
-  interrupts keeps running. The realm can only refuse new work, deliver both signals, report it, and
-  release its references when it finally ends.
+- **What is not promised:** `false` does not mean the work stopped. A realm owns no threads (the
+  engine does, see [ENGINE.md](ENGINE.md)), so closing a realm never stops one, and code that
+  ignores cancellation and interrupts keeps running. The realm can only refuse new work, deliver
+  both signals, report it, and release its references when it finally ends.
 
 ## 7. Interrupt policy
 
@@ -130,6 +130,8 @@ so chains built before closing still complete.
 - `Realm.close(...)` is checked the same way. `MainLane` reports `FORBIDDEN`, and with a main lane installed the same calls are refused on the main thread (ANDROID.md).
 - `Realm.closeAsync()` is the non-blocking close (ANDROID.md section 4); `close()` and `close(timeout)` keep the meaning above.
 
-## 10. Known limits
+## 10. See also
 
-- Thread-backed lanes, priorities and queue limits are specified in [ENGINE.md](ENGINE.md); timers and `Cell` in [CADENCE.md](CADENCE.md).
+- Thread-backed lanes, priorities and queue limits: [ENGINE.md](ENGINE.md).
+- Timers and `Cell`: [CADENCE.md](CADENCE.md).
+- Main thread and lifecycle: [ANDROID.md](ANDROID.md).
