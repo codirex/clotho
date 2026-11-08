@@ -1,28 +1,15 @@
-# Android and the main thread (phase 4)
+# Android and the main thread
 
-Every rule has tests: `MainLaneTest`, `MainLaneRegistryTest`, `RealmCloseAsyncTest` (JVM, core) and
+Tests for these rules: `MainLaneTest`, `MainLaneRegistryTest`, `RealmCloseAsyncTest` (JVM, core) and
 `AndroidMainLaneTest`, `ClothoInitializerTest`, `AndroidRealmsTest` (Robolectric,
-`clotho-android`). The core stays free of Android.
+`clotho-android`), plus the instrumented tests in `clotho-android/src/androidTest`. The core stays
+free of Android.
 
-## 1. Modules and verified versions
+## 1. Dependencies
 
-| Piece | Version | Checked against |
-|---|---|---|
-| Android Gradle Plugin | 9.3.1 (project) | Robolectric 4.17 was built with 9.2.1 and Gradle 9.6.1 |
-| `androidx.startup:startup-runtime` | 1.2.0 (stable) | developer.android.com release page |
-| `androidx.lifecycle:lifecycle-common` / `-runtime` | 2.10.0 (stable; 2.11 is alpha) | developer.android.com release page |
-| Robolectric | 4.17 (API 23 to 37) | robolectric.org compatibility table |
-| JUnit 4 (Robolectric runner) | 4.13.2 | unchanged for years |
-
-- Robolectric API 35 runs on JDK 17; API 36 and 37 need JDK 21 (same table). The tests use
-  `sdk=35` (`robolectric.properties`), so the project's JDK 17 is enough. CI runs JDK 17 and 21.
-- Robolectric 4.16 stops at API 36, so 4.17 is required for `compileSdk 37`.
-- Android 17 replaced `MessageQueue` with a lock-free one for apps that target API 37. The main
-  lane only uses `Handler.post`, so it is not affected.
-- `clotho-android`: `api` on `:clotho` and on startup (the initializer implements `Initializer`);
-  lifecycle is `compileOnly` (section 5).
-- Not verified here: that these versions resolve together in your Gradle (no network in the
-  authoring environment). The first build tells.
+`clotho-android` exposes `:clotho` and `androidx.startup` as `api` (the initializer implements
+`Initializer`); `androidx.lifecycle` is `compileOnly` (section 5). Versions are in
+`gradle/libs.versions.toml`.
 
 ## 2. `MainLane`
 
@@ -68,8 +55,8 @@ Every rule has tests: `MainLaneTest`, `MainLaneRegistryTest`, `RealmCloseAsyncTe
   refused on the main thread).
 - **Returning proves nothing about the jobs.** A job that ignores cancellation keeps the realm
   `CLOSING`. Nothing is reported and no thread is interrupted by `closeAsync`.
-- `close(timeout)` from phase 2 is unchanged and still works after `closeAsync`: on timeout it cancels
-  with interrupt, reports each running job once as `LeakedJobException` and returns `false`.
+- `close(timeout)` is unchanged and still works after `closeAsync`: on timeout it cancels with
+  interrupt, reports each running job once as `LeakedJobException` and returns `false`.
 
 ## 5. `AndroidRealms.forLifecycle(owner)`
 
@@ -96,9 +83,3 @@ Every rule has tests: `MainLaneTest`, `MainLaneRegistryTest`, `RealmCloseAsyncTe
 Clotho timers use the monotonic clock and a plain thread: they do not wake a sleeping device and fire
 late after sleep ([CADENCE.md](CADENCE.md) section 2). Use `AlarmManager` or `WorkManager` for exact or
 wake-up scheduling.
-
-## 8. What was and was not run when this phase was delivered
-
-The core tests ran on a JVM; `AndroidRealmsTest` ran only against hand-written stubs of `Looper`
-and `LifecycleRegistry`; Robolectric, AGP, lint and the manifest merge were not run. The delivery
-notes of the phase list the details.
