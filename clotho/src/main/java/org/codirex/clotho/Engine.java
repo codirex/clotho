@@ -43,12 +43,22 @@ public final class Engine implements AutoCloseable {
     static final Engine GLOBAL = new Builder().name("clotho-global").buildInternal(true);
   }
 
+  /**
+   * Creates the threads of an engine. A seam for the tests, which hold a thread back at a chosen
+   * point of its creation; it is not part of the public API.
+   */
+  @FunctionalInterface
+  interface ThreadMaker {
+    Thread make(Runnable body, String name);
+  }
+
   private final String name;
   private final boolean global;
   private final LongSupplier ticker;
   private final long agingStepNanos;
   private final boolean daemon;
   private final Thread.UncaughtExceptionHandler errorHandler;
+  private final ThreadMaker threadMaker;
   private final PoolLane compute;
   private final PoolLane io;
   private final Cadence cadence;
@@ -67,6 +77,7 @@ public final class Engine implements AutoCloseable {
     this.agingStepNanos = b.agingStepNanos;
     this.daemon = b.daemon;
     this.errorHandler = b.errorHandler;
+    this.threadMaker = b.threadMaker;
     this.compute =
         new PoolLane(
             this,
@@ -121,6 +132,7 @@ public final class Engine implements AutoCloseable {
     private boolean manualTimers;
     private boolean daemon = true;
     private Thread.UncaughtExceptionHandler errorHandler = Builder::printError;
+    private ThreadMaker threadMaker;
 
     private Builder() {}
 
@@ -303,6 +315,17 @@ public final class Engine implements AutoCloseable {
      */
     public Builder taskErrorHandler(Thread.UncaughtExceptionHandler handler) {
       this.errorHandler = Objects.requireNonNull(handler, "handler");
+      return this;
+    }
+
+    /**
+     * Replaces how the engine creates its threads. For the tests only (package-private).
+     *
+     * @param maker creates a thread for a body and a name
+     * @return this builder
+     */
+    Builder threadMaker(ThreadMaker maker) {
+      this.threadMaker = Objects.requireNonNull(maker, "maker");
       return this;
     }
 
@@ -662,7 +685,7 @@ public final class Engine implements AutoCloseable {
   }
 
   Thread newThread(Runnable body, String threadName) {
-    Thread t = new Thread(body, threadName);
+    Thread t = threadMaker != null ? threadMaker.make(body, threadName) : new Thread(body, threadName);
     t.setDaemon(daemon);
     return t;
   }
