@@ -69,6 +69,7 @@ public final class Engine implements AutoCloseable {
   private final ReentrantLock termLock = new ReentrantLock();
   private final Condition termCond = termLock.newCondition();
   private volatile boolean shutdown;
+  private volatile boolean shutdownComplete;
 
   private Engine(Builder b, boolean global) {
     this.name = b.name;
@@ -495,7 +496,10 @@ public final class Engine implements AutoCloseable {
    * @return {@code true} when terminated
    */
   public boolean isTerminated() {
-    return shutdown && live.get() == 0;
+    // Not just "shutdown": while shutdown() is still running, a submission accepted before it began
+    // may be about to start a thread that is not counted yet. Rejected submissions touch neither
+    // the flag nor the count, so once this is true it stays true.
+    return shutdownComplete && live.get() == 0;
   }
 
   /**
@@ -557,6 +561,11 @@ public final class Engine implements AutoCloseable {
     for (ManagedLane lane : managed) {
       lane.onShutdown();
     }
+    // Everything accepted before the flag has been handled: the submissions in flight are done and
+    // their threads are counted, and the lanes that guard themselves with their own lock have been
+    // through it. No submission can start a thread any more; a worker only starts a replacement
+    // before it ends itself. So the count of live threads reaches zero once and stays there.
+    shutdownComplete = true;
     signalTermination();
   }
 
