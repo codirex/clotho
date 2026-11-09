@@ -135,9 +135,9 @@ class EngineShutdownRaceTest extends EngineTestBase {
   }
 
   /**
-   * Runs {@code submit} on its own thread, which blocks at the gate inside the creation of an engine
-   * thread, then shuts the engine down and checks what can be observed while that thread is held
-   * back and after it is released.
+   * Runs {@code submit} on its own thread, which blocks at the gate inside the creation of an
+   * engine thread, then shuts the engine down and checks what can be observed while that thread is
+   * held back and after it is released.
    */
   private void assertShutdownWaitsForTheThreadStart(
       Engine engine, ThreadGate gate, Runnable submit, BooleanSupplier submissionHandled)
