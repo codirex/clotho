@@ -685,7 +685,8 @@ public final class Engine implements AutoCloseable {
   }
 
   Thread newThread(Runnable body, String threadName) {
-    Thread t = threadMaker != null ? threadMaker.make(body, threadName) : new Thread(body, threadName);
+    Thread t =
+        threadMaker != null ? threadMaker.make(body, threadName) : new Thread(body, threadName);
     t.setDaemon(daemon);
     return t;
   }
