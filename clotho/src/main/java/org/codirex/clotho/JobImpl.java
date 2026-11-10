@@ -129,6 +129,7 @@ final class JobImpl<T> implements Job<T> {
   @Override
   public Outcome<T> await() throws InterruptedException {
     LaneContext.checkMayBlock();
+    drainInlineDispatchUntil(done, Long.MAX_VALUE, System.nanoTime());
     done.await();
     return outcomeOf(state.get());
   }
@@ -137,7 +138,11 @@ final class JobImpl<T> implements Job<T> {
   public Outcome<T> await(long timeout, TimeUnit unit)
       throws InterruptedException, TimeoutException {
     LaneContext.checkMayBlock();
-    if (!done.await(timeout, unit)) {
+    long timeoutNanos = unit.toNanos(timeout);
+    long startedNanos = System.nanoTime();
+    drainInlineDispatchUntil(done, timeoutNanos, startedNanos);
+    long remainingNanos = timeoutNanos - (System.nanoTime() - startedNanos);
+    if (!done.await(Math.max(0L, remainingNanos), TimeUnit.NANOSECONDS)) {
       throw new TimeoutException("job not done after " + timeout + " " + unit);
     }
     return outcomeOf(state.get());
@@ -450,6 +455,40 @@ final class JobImpl<T> implements Job<T> {
       runListener(listener, outcome);
     }
     realm.untrack(this);
+  }
+
+  /**
+   * Cooperatively drains queued inline listeners while waiting from inside the active drain.
+   *
+   * <p>This lets cancellation and failure propagation reach a dependent before its callback waits
+   * for that dependent, without recursively dispatching long listener chains.
+   */
+  private static void drainInlineDispatchUntil(
+      CountDownLatch target, long timeoutNanos, long startedNanos) {
+    if (timeoutNanos <= 0) {
+      return;
+    }
+    ArrayDeque<Runnable> queue = INLINE_DISPATCH.get();
+    if (queue == null) {
+      return;
+    }
+    while (target.getCount() != 0) {
+      if (Thread.currentThread().isInterrupted()) {
+        return;
+      }
+      Runnable next = queue.pollFirst();
+      if (next == null) {
+        return;
+      }
+      next.run();
+      if (target.getCount() == 0) {
+        return;
+      }
+      if (timeoutNanos != Long.MAX_VALUE
+          && System.nanoTime() - startedNanos >= timeoutNanos) {
+        return;
+      }
+    }
   }
 
   /** Runs a listener registered after completion without deferring it behind the active drain. */
