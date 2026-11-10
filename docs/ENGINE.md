@@ -13,8 +13,9 @@ themselves is in [SEMANTICS.md](SEMANTICS.md).
   `close(timeout)` and `single(...)` throw `IllegalStateException`, so a library cannot close it for
   everyone. A single lane owns a thread for its whole life, which the global engine could never
   release, so single lanes need a private engine.
-- `liveThreads()` counts the threads the engine currently owns. `isTerminated()` means shut down
-  **and** no owned thread alive.
+- `liveThreads()` counts the threads the engine currently owns. `isTerminated()` means that the
+  shutdown has completed (see section 2) **and** no owned thread is alive. Once it is `true` it stays
+  `true`.
 
 ## 2. Shutdown (deterministic for private engines)
 
@@ -30,7 +31,25 @@ also discard its pending timers and end its thread.
 | `close(t)` | yes | still run until `t`, then discarded | interrupted after `t` | rejected |
 
 - `shutdown()` sets the flag and then waits for the submissions that were already in progress, so
-  after it returns nothing is enqueued and no thread is started any more.
+  after it returns no new task is accepted and no submission starts a thread any more. A submission
+  in progress includes the start of the timer thread.
+- **A pool worker that is ending may start one replacement worker.** A worker ends when it retires
+  after the keep-alive time, when it sees the shutdown with nothing queued, or when its loop fails.
+  If a task is still queued at that moment, it starts one replacement worker to run it. This is how
+  a task accepted before the shutdown is still run when it arrived while the last worker was ending:
+  the submitter counted on that worker and did not start another one, and without the handover the
+  task would stay queued with no worker. So a thread can start after `shutdown()` returned, but only
+  to run a task that was accepted before, and never because of a new submission. (`shutdownNow()`
+  discards the queued tasks, so there is nothing to hand over.)
+- **The handover keeps the thread count correct.** The replacement is counted by `liveThreads()`
+  before the worker that started it ends, so the count never drops to zero in between, and
+  `isTerminated()` stays `false` until the replacement has run the task and ended too.
+- **`isTerminated()` is final.** It can become `true` only after `shutdown()` has finished waiting for
+  the submissions in progress (including a timer thread that was being started), so no accepted
+  submission and no thread start is still pending. A rejected submission never changes it.
+  (Tests: `EngineShutdownRaceTest`, and `EnginePoolHandoffTest` for the handover of a worker that
+  ends because its loop fails. The narrow race of a retiring worker against a submission has no test
+  seam and is not reproduced.)
 - **After shutdown every lane rejects**: `Lane.execute` throws `RejectedExecutionException`; a job
   launched on it ends as `Failure(RejectedExecutionException)`. Creating serial/single lanes throws
   `IllegalStateException`. The lane objects stay valid, they just reject.
