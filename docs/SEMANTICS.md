@@ -28,6 +28,9 @@ ignores `Checkpoint` stays running; Java cannot stop it (see 6).
   lane behaviour. Registering after completion still runs the callback once.
 - `await()` may return **before** callbacks have run. A callback is outstanding work of the realm,
   so `Realm.close()` waits for it.
+- Do not call untimed `await()` from an inline callback when the awaited job depends on a callback
+  queued for that same thread; the callback cannot run until the current callback returns, so this
+  can deadlock. Compose with `then` or `onComplete` instead.
 - An exception thrown by a callback goes to the `UncaughtHandler`; other callbacks still run.
 - If a lane refuses a task (`execute` throws), the job fails with that exception.
 
