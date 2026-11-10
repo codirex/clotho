@@ -55,6 +55,7 @@ final class JobImpl<T> implements Job<T> {
     final Inline<T> cancellationPropagation;
     Node<T> next;
 
+    /** Creates a listener node with optional outcome-specific propagation handlers. */
     Node(
         Inline<T> listener,
         Inline<T> successPropagation,
@@ -223,6 +224,7 @@ final class JobImpl<T> implements Job<T> {
     }
   }
 
+  /** Creates a dependent job that runs {@code step} only when this job succeeds. */
   @Override
   public <R> Job<R> then(Lane lane, Step<? super T, ? extends R> step) {
     Objects.requireNonNull(lane, "lane");
@@ -243,6 +245,7 @@ final class JobImpl<T> implements Job<T> {
     return next;
   }
 
+  /** Creates a dependent job that runs {@code step} only when this job fails. */
   @Override
   public Job<T> recover(Lane lane, Step<? super Throwable, ? extends T> step) {
     Objects.requireNonNull(lane, "lane");
