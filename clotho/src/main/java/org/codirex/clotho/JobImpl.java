@@ -141,11 +141,11 @@ final class JobImpl<T> implements Job<T> {
     long timeoutNanos = unit.toNanos(timeout);
     long startedNanos = System.nanoTime();
     if (drainInlineDispatchUntil(done, timeoutNanos, startedNanos)) {
+      done.await(0L, TimeUnit.NANOSECONDS);
       return outcomeOf(state.get());
     }
     long remainingNanos = timeoutNanos - (System.nanoTime() - startedNanos);
-    if (remainingNanos <= 0
-        || !done.await(remainingNanos, TimeUnit.NANOSECONDS)) {
+    if (!done.await(Math.max(0L, remainingNanos), TimeUnit.NANOSECONDS)) {
       throw new TimeoutException("job not done after " + timeout + " " + unit);
     }
     return outcomeOf(state.get());
