@@ -251,6 +251,31 @@ class JobChainTest {
     assertThat(realm.outstanding()).isZero();
   }
 
+  /**
+   * Completed-parent continuations registered from an active inline callback must still run before
+   * registration returns, so awaiting the dependent cannot wait on the current dispatch thread.
+   */
+  @Test
+  void continuationAddedToACompletedJobRunsBeforeReturningInsideInlineDispatch() throws Exception {
+    Job<Integer> completed = realm.launch(Lane.direct(), cp -> 10);
+    Job<Integer> trigger = realm.launch(lane, cp -> 1);
+    AtomicBoolean ranSynchronously = new AtomicBoolean();
+
+    Job<Integer> dependent =
+        trigger.then(
+            Lane.direct(),
+            (value, cp) -> {
+              Job<Integer> nested = completed.then(Lane.direct(), (v, c) -> v + 1);
+              ranSynchronously.set(nested.isDone());
+              return nested.await().getOrThrow();
+            });
+
+    lane.runAll();
+
+    assertThat(ranSynchronously.get()).isTrue();
+    assertThat(dependent.await()).isEqualTo(Outcome.success(11));
+  }
+
   @Test
   void directLaneRunsInlineDuringLaunch() throws Exception {
     Job<Integer> a = realm.launch(Lane.direct(), cp -> 3);
