@@ -20,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.codirex.clotho.support.ManualLane;
@@ -308,6 +309,57 @@ class JobChainTest {
     assertThat(waitFailure.get()).isNull();
     assertThat(awaited.get()).isNotNull();
     assertThat(awaited.get().isCancelled()).isTrue();
+  }
+
+  /** Cancellation propagation across a deep direct chain must also stay iterative. */
+  @Test
+  void longDirectThenChainPropagatesCancellationWithoutOverflowingTheStack() throws Exception {
+    int chainLength = 10_000;
+    Job<Integer> root = realm.launch(lane, cp -> 0);
+    Job<Integer> chain = root;
+    for (int i = 0; i < chainLength; i++) {
+      chain = chain.then(Lane.direct(), (value, cp) -> value + 1);
+    }
+
+    assertThat(realm.outstanding()).isEqualTo(chainLength + 1);
+    assertThat(root.cancel()).isTrue();
+
+    assertThat(chain.isDone()).isTrue();
+    assertThat(chain.await().isCancelled()).isTrue();
+    assertThat(realm.outstanding()).isZero();
+  }
+
+  /** A timed wait must not execute unrelated callbacks queued by an active inline dispatch. */
+  @Test
+  void timedAwaitDoesNotRunQueuedInlineCallbacks() throws Exception {
+    Job<Integer> trigger = realm.launch(lane, cp -> 1);
+    Job<Integer> callbackOwner = realm.launch(lane, cp -> 2);
+    Job<Integer> awaited = realm.launch(lane, cp -> 3);
+    AtomicBoolean callbackRan = new AtomicBoolean();
+    AtomicBoolean callbackRanBeforeTimeout = new AtomicBoolean();
+    AtomicBoolean timedOut = new AtomicBoolean();
+
+    callbackOwner.onComplete(Lane.direct(), outcome -> callbackRan.set(true));
+    trigger.onComplete(
+        Lane.direct(),
+        outcome -> {
+          callbackOwner.cancel();
+          try {
+            awaited.await(1, TimeUnit.MILLISECONDS);
+          } catch (TimeoutException expected) {
+            timedOut.set(true);
+          } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(interrupted);
+          }
+          callbackRanBeforeTimeout.set(callbackRan.get());
+        });
+
+    lane.runAll();
+
+    assertThat(timedOut.get()).isTrue();
+    assertThat(callbackRanBeforeTimeout.get()).isFalse();
+    assertThat(callbackRan.get()).isTrue();
   }
 
   @Test
