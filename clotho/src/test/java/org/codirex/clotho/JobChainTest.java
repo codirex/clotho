@@ -267,7 +267,7 @@ class JobChainTest {
             (value, cp) -> {
               Job<Integer> nested = completed.then(Lane.direct(), (v, c) -> v + 1);
               ranSynchronously.set(nested.isDone());
-              return nested.await().getOrThrow();
+              return nested.isDone() ? nested.await().getOrThrow() : -1;
             });
 
     lane.runAll();
