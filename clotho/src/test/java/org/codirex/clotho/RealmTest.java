@@ -403,6 +403,25 @@ class RealmTest {
     }
   }
 
+
+  @Test
+  void aHandlerRethrowingTheReportedFailureDoesNotBreakTheRealm() {
+    Realm realm =
+        Realm.builder("same-failure-handler")
+            .uncaughtHandler(
+                (r, error) -> {
+                  throw (RuntimeException) error;
+                })
+            .open();
+    RuntimeException failure = new IllegalStateException("same failure");
+
+    realm.report(failure);
+
+    assertThat(realm.outstanding()).isZero();
+    realm.close();
+    assertThat(realm.isClosed()).isTrue();
+  }
+
   @Test
   void aThrowingHandlerDoesNotBreakTheRealm() throws Exception {
     Realm realm =
