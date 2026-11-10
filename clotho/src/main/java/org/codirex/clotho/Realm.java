@@ -944,7 +944,9 @@ public final class Realm implements AutoCloseable {
     try {
       h.uncaught(this, error);
     } catch (Throwable inner) {
-      inner.addSuppressed(error);
+      if (inner != error) {
+        inner.addSuppressed(error);
+      }
       inner.printStackTrace();
     }
   }
