@@ -238,6 +238,7 @@ class JobChainTest {
         .isInstanceOf(RealmClosedException.class);
   }
 
+  /** Verifies that a long sequence of direct-lane continuations is drained without recursion. */
   @Test
   void longDirectThenChainDoesNotOverflowTheStack() throws Exception {
     int chainLength = 10_000;
@@ -282,8 +283,7 @@ class JobChainTest {
    * callback waits for the dependent, rather than blocking the thread that owns that drain.
    */
   @Test
-  void cancellationPropagationCanCompleteAnAwaitedDependentInsideInlineDispatch()
-      throws Exception {
+  void cancellationPropagationCanCompleteAnAwaitedDependentInsideInlineDispatch() throws Exception {
     Job<Integer> trigger = realm.launch(lane, cp -> 1);
     Job<Integer> pending = realm.launch(lane, cp -> 2);
     Job<Integer> dependent = pending.then(Lane.direct(), (value, cp) -> value + 1);
