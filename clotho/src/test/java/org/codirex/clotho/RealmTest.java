@@ -403,7 +403,6 @@ class RealmTest {
     }
   }
 
-
   @Test
   void aHandlerRethrowingTheReportedFailureDoesNotBreakTheRealm() {
     Realm realm =
