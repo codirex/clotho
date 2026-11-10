@@ -62,6 +62,8 @@ public sealed interface Job<T> permits JobImpl {
   /**
    * Blocks until the job is done.
    *
+   * <p>Waiting does not execute completion callbacks queued on the calling thread.
+   *
    * <p>Throws if called from work running on a lane whose policy is {@link
    * BlockingPolicy#FORBIDDEN}, even if the job is already done, so misuse is found early.
    *
@@ -73,6 +75,8 @@ public sealed interface Job<T> permits JobImpl {
 
   /**
    * Blocks until the job is done or the timeout expires.
+   *
+   * <p>Waiting does not execute completion callbacks queued on the calling thread.
    *
    * @param timeout the maximum time to wait
    * @param unit the unit of {@code timeout}
