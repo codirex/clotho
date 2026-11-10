@@ -126,7 +126,7 @@ class JobInlineDispatchTest {
 
   @ParameterizedTest
   @ValueSource(booleans = {false, true})
-  void awaitPumpsMultipleLevelsOfCancellationPropagation(boolean timed) {
+  void cancellationPropagationSettlesMultipleLevelsBeforeInlineAwait(boolean timed) {
     JobImpl<Integer> trigger = pending();
     JobImpl<Integer> parent = pending();
     Job<Integer> tail = parent;
@@ -141,7 +141,7 @@ class JobInlineDispatchTest {
           try {
             result.set(timed ? awaited.await(1, TimeUnit.SECONDS) : awaited.await());
           } catch (InterruptedException | TimeoutException e) {
-            throw new AssertionError("queued cancellation should complete the await", e);
+            throw new AssertionError("cancellation propagation should settle before await", e);
           }
         });
 
@@ -153,49 +153,58 @@ class JobInlineDispatchTest {
 
   @ParameterizedTest
   @ValueSource(booleans = {false, true})
-  void timedAwaitPumpsSuccessAndFailurePropagation(boolean fail) {
+  void awaitObservesInternalFailurePropagationButDoesNotRunSuccessSteps(boolean fail) {
     JobImpl<Integer> trigger = pending();
     JobImpl<Integer> parent = pending();
     Job<Integer> dependent = parent.then(Lane.direct(), (value, cp) -> value + 1);
     RuntimeException failure = new IllegalArgumentException("original");
     AtomicReference<Outcome<Integer>> result = new AtomicReference<>();
+    AtomicBoolean successStepWasDeferred = new AtomicBoolean();
     trigger.addInline(
         outcome -> {
           parent.completeIfPending(fail ? Outcome.failure(failure) : Outcome.success(7));
           try {
-            result.set(dependent.await(1, TimeUnit.SECONDS));
+            if (fail) {
+              result.set(dependent.await(1, TimeUnit.SECONDS));
+            } else {
+              assertThatThrownBy(() -> dependent.await(1, TimeUnit.MILLISECONDS))
+                  .isInstanceOf(TimeoutException.class);
+              successStepWasDeferred.set(!dependent.isDone());
+            }
           } catch (InterruptedException | TimeoutException e) {
-            throw new AssertionError("queued completion should be available", e);
+            throw new AssertionError("internal failure propagation should be available", e);
           }
         });
 
     trigger.completeIfPending(Outcome.success(1));
 
-    assertThat(result.get()).isSameAs(dependent.outcomeOrNull());
     if (fail) {
+      assertThat(result.get()).isSameAs(dependent.outcomeOrNull());
       assertThat(result.get().failureOrNull()).isSameAs(failure);
     } else {
-      assertThat(result.get()).isEqualTo(Outcome.success(8));
+      assertThat(successStepWasDeferred).isTrue();
+      assertThat(dependent.outcomeOrNull()).isEqualTo(Outcome.success(8));
     }
   }
 
   @ParameterizedTest
   @ValueSource(longs = {0, -1})
-  void nonPositiveTimeoutDoesNotPumpQueuedPropagation(long timeout) {
+  void nonPositiveTimeoutObservesAlreadyPropagatedCancellation(long timeout) throws Exception {
     JobImpl<Integer> trigger = pending();
     JobImpl<Integer> parent = pending();
     Job<Integer> dependent = parent.then(Lane.direct(), (value, cp) -> value);
+    AtomicReference<Outcome<Integer>> result = new AtomicReference<>();
     trigger.addInline(
         outcome -> {
           parent.cancel();
-          assertThatThrownBy(() -> dependent.await(timeout, TimeUnit.NANOSECONDS))
-              .isInstanceOf(TimeoutException.class);
-          assertThat(dependent.isDone()).isFalse();
+          result.set(dependent.await(timeout, TimeUnit.NANOSECONDS));
+          assertThat(dependent.isDone()).isTrue();
         });
 
     trigger.completeIfPending(Outcome.success(1));
 
-    assertThat(dependent.outcomeOrNull().isCancelled()).isTrue();
+    assertThat(result.get()).isSameAs(dependent.outcomeOrNull());
+    assertThat(result.get().isCancelled()).isTrue();
   }
 
   @ParameterizedTest
@@ -221,7 +230,7 @@ class JobInlineDispatchTest {
 
   @ParameterizedTest
   @ValueSource(booleans = {false, true})
-  void interruptedAwaitDoesNotPumpQueuedWorkAndClearsInterruptStatus(boolean timed) {
+  void interruptedAwaitKeepsInterruptSemanticsAfterEagerPropagation(boolean timed) {
     JobImpl<Integer> trigger = pending();
     JobImpl<Integer> parent = pending();
     Job<Integer> dependent = parent.then(Lane.direct(), (value, cp) -> value);
@@ -240,7 +249,7 @@ class JobInlineDispatchTest {
                     })
                 .isInstanceOf(InterruptedException.class);
             assertThat(Thread.currentThread().isInterrupted()).isFalse();
-            assertThat(dependent.isDone()).isFalse();
+            assertThat(dependent.isDone()).isTrue();
           } finally {
             Thread.interrupted();
           }
