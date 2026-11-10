@@ -564,22 +564,24 @@ final class JobImpl<T> implements Job<T> {
     }
 
     try {
-      Runnable next;
-      while ((next = propagationQueue.pollFirst()) != null) {
-        next.run();
-      }
-    } finally {
-      PROPAGATION_DISPATCH.remove();
-    }
-
-    if (ownsInlineQueue) {
       try {
         Runnable next;
-        while ((next = inlineQueue.pollFirst()) != null) {
+        while ((next = propagationQueue.pollFirst()) != null) {
           next.run();
         }
       } finally {
-        INLINE_DISPATCH.remove();
+        PROPAGATION_DISPATCH.remove();
+      }
+    } finally {
+      if (ownsInlineQueue) {
+        try {
+          Runnable next;
+          while ((next = inlineQueue.pollFirst()) != null) {
+            next.run();
+          }
+        } finally {
+          INLINE_DISPATCH.remove();
+        }
       }
     }
   }
