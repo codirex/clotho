@@ -238,6 +238,20 @@ class JobChainTest {
   }
 
   @Test
+  void longDirectThenChainDoesNotOverflowTheStack() throws Exception {
+    int chainLength = 10_000;
+    Job<Integer> chain = realm.launch(lane, cp -> 0);
+    for (int i = 0; i < chainLength; i++) {
+      chain = chain.then(Lane.direct(), (value, cp) -> value + 1);
+    }
+
+    lane.runAll();
+
+    assertThat(chain.await()).isEqualTo(Outcome.success(chainLength));
+    assertThat(realm.outstanding()).isZero();
+  }
+
+  @Test
   void directLaneRunsInlineDuringLaunch() throws Exception {
     Job<Integer> a = realm.launch(Lane.direct(), cp -> 3);
     assertThat(a.isDone()).isTrue();
