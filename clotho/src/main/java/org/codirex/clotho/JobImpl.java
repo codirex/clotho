@@ -42,6 +42,13 @@ final class JobImpl<T> implements Job<T> {
     CANCEL_REQUESTED
   }
 
+  /** Result of pumping the current thread's inline dispatch queue while awaiting a job. */
+  private enum InlineDrainResult {
+    COMPLETED,
+    EMPTY,
+    TIMED_OUT
+  }
+
   /** Inline listeners run on the thread that decided the outcome. */
   @FunctionalInterface
   interface Inline<T> {
@@ -126,6 +133,7 @@ final class JobImpl<T> implements Job<T> {
     return s instanceof Outcome<?> ? outcomeOf(s) : null;
   }
 
+  /** Waits for completion, pumping queued inline propagation when called from its active drain. */
   @Override
   public Outcome<T> await() throws InterruptedException {
     LaneContext.checkMayBlock();
@@ -134,13 +142,18 @@ final class JobImpl<T> implements Job<T> {
     return outcomeOf(state.get());
   }
 
+  /** Waits up to the timeout, including time spent pumping this thread's inline dispatch queue. */
   @Override
   public Outcome<T> await(long timeout, TimeUnit unit)
       throws InterruptedException, TimeoutException {
     LaneContext.checkMayBlock();
     long timeoutNanos = unit.toNanos(timeout);
     long startedNanos = System.nanoTime();
-    if (drainInlineDispatchUntil(done, timeoutNanos, startedNanos)) {
+    InlineDrainResult drain = drainInlineDispatchUntil(done, timeoutNanos, startedNanos);
+    if (drain == InlineDrainResult.TIMED_OUT) {
+      throw new TimeoutException("job not done after " + timeout + " " + unit);
+    }
+    if (drain == InlineDrainResult.COMPLETED) {
       done.await(0L, TimeUnit.NANOSECONDS);
       return outcomeOf(state.get());
     }
@@ -308,6 +321,7 @@ final class JobImpl<T> implements Job<T> {
     }
   }
 
+  /** Adds a completion listener, running it immediately when the job is already done. */
   void addInline(Inline<T> listener) {
     Node<T> node = new Node<>(listener);
     for (; ; ) {
@@ -466,36 +480,36 @@ final class JobImpl<T> implements Job<T> {
    * <p>This lets cancellation and failure propagation reach a dependent before its callback waits
    * for that dependent, without recursively dispatching long listener chains.
    */
-  private static boolean drainInlineDispatchUntil(
+  private static InlineDrainResult drainInlineDispatchUntil(
       CountDownLatch target, long timeoutNanos, long startedNanos) {
     if (target.getCount() == 0) {
-      return true;
+      return InlineDrainResult.COMPLETED;
     }
     if (timeoutNanos <= 0) {
-      return false;
+      return InlineDrainResult.TIMED_OUT;
     }
     ArrayDeque<Runnable> queue = INLINE_DISPATCH.get();
     if (queue == null) {
-      return false;
+      return InlineDrainResult.EMPTY;
     }
     while (target.getCount() != 0) {
       if (Thread.currentThread().isInterrupted()) {
-        return false;
+        return InlineDrainResult.EMPTY;
       }
       Runnable next = queue.pollFirst();
       if (next == null) {
-        return target.getCount() == 0;
+        return InlineDrainResult.EMPTY;
       }
       next.run();
       if (timeoutNanos != Long.MAX_VALUE
           && System.nanoTime() - startedNanos >= timeoutNanos) {
-        return false;
+        return InlineDrainResult.TIMED_OUT;
       }
       if (target.getCount() == 0) {
-        return true;
+        return InlineDrainResult.COMPLETED;
       }
     }
-    return true;
+    return InlineDrainResult.COMPLETED;
   }
 
   /** Runs a listener registered after completion without deferring it behind the active drain. */
