@@ -42,13 +42,6 @@ final class JobImpl<T> implements Job<T> {
     CANCEL_REQUESTED
   }
 
-  /** Result of pumping the current thread's inline dispatch queue while awaiting a job. */
-  private enum InlineDrainResult {
-    COMPLETED,
-    EMPTY,
-    TIMED_OUT
-  }
-
   /** Inline listeners run on the thread that decided the outcome. */
   @FunctionalInterface
   interface Inline<T> {
@@ -57,18 +50,44 @@ final class JobImpl<T> implements Job<T> {
 
   private static final class Node<T> {
     final Inline<T> listener;
+    final Inline<T> successPropagation;
+    final Inline<T> failurePropagation;
+    final Inline<T> cancellationPropagation;
     Node<T> next;
 
-    Node(Inline<T> listener) {
+    Node(
+        Inline<T> listener,
+        Inline<T> successPropagation,
+        Inline<T> failurePropagation,
+        Inline<T> cancellationPropagation) {
       this.listener = listener;
+      this.successPropagation = successPropagation;
+      this.failurePropagation = failurePropagation;
+      this.cancellationPropagation = cancellationPropagation;
+    }
+
+    Inline<T> propagationFor(Outcome<T> outcome) {
+      if (outcome instanceof Outcome.Success<?>) {
+        return successPropagation;
+      }
+      if (outcome instanceof Outcome.Failure<?>) {
+        return failurePropagation;
+      }
+      return cancellationPropagation;
     }
   }
 
   @SuppressWarnings("rawtypes")
-  private static final Node DONE = new Node<>(null);
+  private static final Node DONE = new Node<>(null, null, null, null);
 
   /** Reentrant inline listeners are drained iteratively to bound continuation stack depth. */
   private static final ThreadLocal<ArrayDeque<Runnable>> INLINE_DISPATCH = new ThreadLocal<>();
+
+  /**
+   * Internal outcome propagation is drained separately so it never has to execute user callbacks
+   * merely to settle a dependent job.
+   */
+  private static final ThreadLocal<ArrayDeque<Runnable>> PROPAGATION_DISPATCH = new ThreadLocal<>();
 
   private final Realm realm;
   private final boolean root;
@@ -134,7 +153,7 @@ final class JobImpl<T> implements Job<T> {
   }
 
   /**
-   * Waits for completion, pumping queued inline propagation when called from its active drain.
+   * Blocks until the job completes. Waiting never executes queued application callbacks.
    *
    * @throws BlockingNotAllowedException if the current lane forbids blocking or the caller is on
    *     the installed main thread
@@ -142,15 +161,13 @@ final class JobImpl<T> implements Job<T> {
   @Override
   public Outcome<T> await() throws InterruptedException {
     LaneContext.checkMayBlock();
-    drainInlineDispatchUntil(done, Long.MAX_VALUE, System.nanoTime());
     done.await();
     return outcomeOf(state.get());
   }
 
   /**
-   * Waits for completion, counting time spent pumping this thread's inline dispatch queue toward
-   * the timeout. A listener already running is not interrupted at the deadline; if the job
-   * completes during that listener, completion is checked before the elapsed time.
+   * Blocks until the job completes or the timeout expires. Waiting never executes queued
+   * application callbacks.
    *
    * @throws BlockingNotAllowedException if the current lane forbids blocking or the caller is on
    *     the installed main thread
@@ -160,18 +177,7 @@ final class JobImpl<T> implements Job<T> {
   public Outcome<T> await(long timeout, TimeUnit unit)
       throws InterruptedException, TimeoutException {
     LaneContext.checkMayBlock();
-    long timeoutNanos = unit.toNanos(timeout);
-    long startedNanos = System.nanoTime();
-    InlineDrainResult drain = drainInlineDispatchUntil(done, timeoutNanos, startedNanos);
-    if (drain == InlineDrainResult.TIMED_OUT) {
-      throw new TimeoutException("job not done after " + timeout + " " + unit);
-    }
-    if (drain == InlineDrainResult.COMPLETED) {
-      done.await(0L, TimeUnit.NANOSECONDS);
-      return outcomeOf(state.get());
-    }
-    long remainingNanos = timeoutNanos - (System.nanoTime() - startedNanos);
-    if (!done.await(Math.max(0L, remainingNanos), TimeUnit.NANOSECONDS)) {
+    if (!done.await(timeout, unit)) {
       throw new TimeoutException("job not done after " + timeout + " " + unit);
     }
     return outcomeOf(state.get());
@@ -223,15 +229,16 @@ final class JobImpl<T> implements Job<T> {
     JobImpl<R> next = create(realm, false, priority);
     addInline(
         outcome -> {
-          if (outcome instanceof Outcome.Success<T> success) {
-            T value = success.value();
-            next.start(lane, cp -> step.apply(value, cp));
-          } else if (outcome instanceof Outcome.Failure<T> failure) {
-            next.completeIfPending(Outcome.failure(failure.cause()));
-          } else {
-            next.completeIfPending(Outcome.cancelled());
-          }
-        });
+          Outcome.Success<T> success = (Outcome.Success<T>) outcome;
+          T value = success.value();
+          next.start(lane, cp -> step.apply(value, cp));
+        },
+        null,
+        outcome -> {
+          Outcome.Failure<T> failure = (Outcome.Failure<T>) outcome;
+          next.completeIfPending(Outcome.failure(failure.cause()));
+        },
+        outcome -> next.completeIfPending(Outcome.cancelled()));
     return next;
   }
 
@@ -242,15 +249,16 @@ final class JobImpl<T> implements Job<T> {
     JobImpl<T> next = create(realm, false, priority);
     addInline(
         outcome -> {
-          if (outcome instanceof Outcome.Success<T> success) {
-            next.completeIfPending(Outcome.success(success.value()));
-          } else if (outcome instanceof Outcome.Failure<T> failure) {
-            Throwable cause = failure.cause();
-            next.start(lane, cp -> step.apply(cause, cp));
-          } else {
-            next.completeIfPending(Outcome.cancelled());
-          }
-        });
+          Outcome.Failure<T> failure = (Outcome.Failure<T>) outcome;
+          Throwable cause = failure.cause();
+          next.start(lane, cp -> step.apply(cause, cp));
+        },
+        outcome -> {
+          Outcome.Success<T> success = (Outcome.Success<T>) outcome;
+          next.completeIfPending(Outcome.success(success.value()));
+        },
+        null,
+        outcome -> next.completeIfPending(Outcome.cancelled()));
     return next;
   }
 
@@ -335,15 +343,37 @@ final class JobImpl<T> implements Job<T> {
   }
 
   /**
-   * Adds a completion listener. If completion has closed the listener list, runs it synchronously
-   * before returning. Listener failures are reported to the realm.
+   * Adds a completion listener. Outcomes that only settle a dependent are handled by the internal
+   * propagation trampoline; the ordinary listener is reserved for work that may enter application
+   * code. A listener added after completion still runs synchronously before this method returns.
    */
   void addInline(Inline<T> listener) {
-    Node<T> node = new Node<>(listener);
+    addInline(listener, null, null, null);
+  }
+
+  /**
+   * Adds a listener with optional internal propagation paths for each outcome kind.
+   *
+   * <p>Propagation handlers must only settle framework-owned job state; they must not invoke
+   * application callbacks or run user steps.
+   */
+  void addInline(
+      Inline<T> listener,
+      Inline<T> successPropagation,
+      Inline<T> failurePropagation,
+      Inline<T> cancellationPropagation) {
+    Node<T> node =
+        new Node<>(listener, successPropagation, failurePropagation, cancellationPropagation);
     for (; ; ) {
       Node<T> head = listeners.get();
       if (head == DONE) {
-        runListenerImmediately(listener, outcomeOf(state.get()));
+        Outcome<T> outcome = outcomeOf(state.get());
+        Inline<T> propagation = node.propagationFor(outcome);
+        if (propagation != null) {
+          runPropagationListener(propagation, outcome);
+        } else {
+          runListenerImmediately(listener, outcome);
+        }
         return;
       }
       node.next = head;
@@ -479,60 +509,79 @@ final class JobImpl<T> implements Job<T> {
     }
     @SuppressWarnings("unchecked")
     Node<T> head = listeners.getAndSet(DONE);
-    List<Inline<T>> ordered = new ArrayList<>();
+    List<Node<T>> ordered = new ArrayList<>();
     for (Node<T> n = head; n != null; n = n.next) {
-      ordered.add(n.listener);
+      ordered.add(n);
     }
     Collections.reverse(ordered);
-    for (Inline<T> listener : ordered) {
-      runListener(listener, outcome);
+    for (Node<T> node : ordered) {
+      Inline<T> propagation = node.propagationFor(outcome);
+      if (propagation != null) {
+        runPropagationListener(propagation, outcome);
+      } else {
+        runListener(node.listener, outcome);
+      }
     }
     realm.untrack(this);
   }
 
   /**
-   * Cooperatively drains queued inline listeners while waiting from inside the active drain.
-   *
-   * <p>This lets cancellation and failure propagation reach a dependent before its callback waits
-   * for that dependent, without recursively dispatching long listener chains.
-   *
-   * @param timeoutNanos the timeout in nanoseconds; {@link Long#MAX_VALUE} disables elapsed-time
-   *     checks while draining
-   * @param startedNanos the timeout start time from {@link System#nanoTime()}
-   * @return {@code COMPLETED} if the target is observed released; {@code TIMED_OUT} for a
-   *     nonpositive timeout or an expired timeout after a listener, if the target was unreleased at
-   *     the preceding check; or {@code EMPTY} if no drain is active, its queue is empty, or the
-   *     thread is interrupted
+   * Drains framework-only outcome propagation iteratively, then releases any application listeners
+   * that were queued by jobs completed during propagation. This prevents a long continuation
+   * chain from recursing and keeps application callbacks out of the propagation phase.
    */
-  private static InlineDrainResult drainInlineDispatchUntil(
-      CountDownLatch target, long timeoutNanos, long startedNanos) {
-    if (target.getCount() == 0) {
-      return InlineDrainResult.COMPLETED;
+  private void runPropagationListener(Inline<T> listener, Outcome<T> outcome) {
+    Lane context = LaneContext.current();
+    Runnable dispatch =
+        () ->
+            LaneContext.runWith(
+                context,
+                () -> {
+                  try {
+                    listener.done(outcome);
+                  } catch (Throwable t) {
+                    realm.report(t);
+                  }
+                });
+
+    ArrayDeque<Runnable> propagationQueue = PROPAGATION_DISPATCH.get();
+    boolean ownsPropagationQueue = propagationQueue == null;
+    if (ownsPropagationQueue) {
+      propagationQueue = new ArrayDeque<>();
+      PROPAGATION_DISPATCH.set(propagationQueue);
     }
-    if (timeoutNanos <= 0) {
-      return InlineDrainResult.TIMED_OUT;
+
+    ArrayDeque<Runnable> inlineQueue = INLINE_DISPATCH.get();
+    boolean ownsInlineQueue = inlineQueue == null;
+    if (ownsInlineQueue) {
+      inlineQueue = new ArrayDeque<>();
+      INLINE_DISPATCH.set(inlineQueue);
     }
-    ArrayDeque<Runnable> queue = INLINE_DISPATCH.get();
-    if (queue == null) {
-      return InlineDrainResult.EMPTY;
+
+    propagationQueue.addLast(dispatch);
+    if (!ownsPropagationQueue) {
+      return;
     }
-    while (target.getCount() != 0) {
-      if (Thread.currentThread().isInterrupted()) {
-        return InlineDrainResult.EMPTY;
+
+    try {
+      Runnable next;
+      while ((next = propagationQueue.pollFirst()) != null) {
+        next.run();
       }
-      Runnable next = queue.pollFirst();
-      if (next == null) {
-        return InlineDrainResult.EMPTY;
-      }
-      next.run();
-      if (target.getCount() == 0) {
-        return InlineDrainResult.COMPLETED;
-      }
-      if (timeoutNanos != Long.MAX_VALUE && System.nanoTime() - startedNanos >= timeoutNanos) {
-        return InlineDrainResult.TIMED_OUT;
+    } finally {
+      PROPAGATION_DISPATCH.remove();
+    }
+
+    if (ownsInlineQueue) {
+      try {
+        Runnable next;
+        while ((next = inlineQueue.pollFirst()) != null) {
+          next.run();
+        }
+      } finally {
+        INLINE_DISPATCH.remove();
       }
     }
-    return InlineDrainResult.COMPLETED;
   }
 
   /**
