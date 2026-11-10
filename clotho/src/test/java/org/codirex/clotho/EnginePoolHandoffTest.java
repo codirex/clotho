@@ -60,11 +60,11 @@ class EnginePoolHandoffTest extends EngineTestBase {
 
       ticker.armed.set(true);
       first.release.countDown();
-      // The first worker ends with the task still queued and is creating its replacement. It is
-      // still counted, so the engine is not terminated and the task has not run.
+      // The replacement has been registered with the engine, but its start() is held by the gate.
+      // Both old and replacement workers must therefore be counted during the handoff.
       gate.awaitArrived();
       assertThat(engine.isTerminated()).isFalse();
-      assertThat(engine.liveThreads()).isEqualTo(1);
+      assertThat(engine.liveThreads()).isEqualTo(2);
       assertThat(secondRan.getCount()).isEqualTo(1);
     } finally {
       first.release.countDown();
@@ -113,7 +113,7 @@ class EnginePoolHandoffTest extends EngineTestBase {
     }
   }
 
-  /** Holds back the first engine thread whose name matches while it is being created. */
+  /** Holds back the first matching engine thread immediately before its underlying start(). */
   private static final class ThreadGate implements Engine.ThreadMaker {
 
     private final Predicate<String> matches;
@@ -128,18 +128,24 @@ class EnginePoolHandoffTest extends EngineTestBase {
 
     @Override
     public Thread make(Runnable body, String name) {
-      if (matches.test(name) && taken.compareAndSet(false, true)) {
-        arrived.countDown();
-        try {
-          if (!release.await(30, TimeUnit.SECONDS)) {
-            throw new IllegalStateException("the thread gate was never opened");
-          }
-        } catch (InterruptedException e) {
-          Thread.currentThread().interrupt();
-          throw new IllegalStateException("interrupted at the thread gate", e);
-        }
-      }
-      Thread thread = new Thread(body, name);
+      Thread thread =
+          new Thread(body, name) {
+            @Override
+            public synchronized void start() {
+              if (matches.test(getName()) && taken.compareAndSet(false, true)) {
+                arrived.countDown();
+                try {
+                  if (!release.await(30, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("the thread gate was never opened");
+                  }
+                } catch (InterruptedException e) {
+                  Thread.currentThread().interrupt();
+                  throw new IllegalStateException("interrupted at the thread gate", e);
+                }
+              }
+              super.start();
+            }
+          };
       created.add(thread);
       return thread;
     }
