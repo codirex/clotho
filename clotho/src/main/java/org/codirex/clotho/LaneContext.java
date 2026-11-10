@@ -71,7 +71,6 @@ final class LaneContext {
     }
   }
 
-
   /** Throws if the current lane forbids blocking. */
   static void checkMayBlock() {
     Lane current = CURRENT.get();
