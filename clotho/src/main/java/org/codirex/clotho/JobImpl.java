@@ -501,12 +501,11 @@ final class JobImpl<T> implements Job<T> {
         return InlineDrainResult.EMPTY;
       }
       next.run();
-      if (timeoutNanos != Long.MAX_VALUE
-          && System.nanoTime() - startedNanos >= timeoutNanos) {
-        return InlineDrainResult.TIMED_OUT;
-      }
       if (target.getCount() == 0) {
         return InlineDrainResult.COMPLETED;
+      }
+      if (timeoutNanos != Long.MAX_VALUE && System.nanoTime() - startedNanos >= timeoutNanos) {
+        return InlineDrainResult.TIMED_OUT;
       }
     }
     return InlineDrainResult.COMPLETED;
