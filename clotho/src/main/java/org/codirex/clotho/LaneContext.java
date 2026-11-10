@@ -49,6 +49,29 @@ final class LaneContext {
     return CURRENT.get();
   }
 
+  /**
+   * Runs with an explicitly captured lane context, including a captured absence of context, then
+   * restores the context that was active on entry.
+   */
+  static void runWith(Lane lane, Runnable task) {
+    Lane previous = CURRENT.get();
+    if (lane == null) {
+      CURRENT.remove();
+    } else {
+      CURRENT.set(lane);
+    }
+    try {
+      task.run();
+    } finally {
+      if (previous == null) {
+        CURRENT.remove();
+      } else {
+        CURRENT.set(previous);
+      }
+    }
+  }
+
+
   /** Throws if the current lane forbids blocking. */
   static void checkMayBlock() {
     Lane current = CURRENT.get();
