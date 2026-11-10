@@ -199,9 +199,11 @@ class JobInlineDispatchTest {
           parent.cancel();
           try {
             result.set(dependent.await(timeout, TimeUnit.NANOSECONDS));
-          } catch (InterruptedException | TimeoutException interrupted) {
+          } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             throw new AssertionError(interrupted);
+          } catch (TimeoutException timeoutFailure) {
+            throw new AssertionError(timeoutFailure);
           }
           assertThat(dependent.isDone()).isTrue();
         });
