@@ -15,6 +15,7 @@
  */
 package org.codirex.clotho;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -58,6 +59,9 @@ final class JobImpl<T> implements Job<T> {
 
   @SuppressWarnings("rawtypes")
   private static final Node DONE = new Node<>(null);
+
+  /** Reentrant inline listeners are drained iteratively to bound continuation stack depth. */
+  private static final ThreadLocal<ArrayDeque<Runnable>> INLINE_DISPATCH = new ThreadLocal<>();
 
   private final Realm realm;
   private final boolean root;
@@ -449,10 +453,31 @@ final class JobImpl<T> implements Job<T> {
   }
 
   private void runListener(Inline<T> listener, Outcome<T> outcome) {
+    Runnable dispatch =
+        () -> {
+          try {
+            listener.done(outcome);
+          } catch (Throwable t) {
+            realm.report(t);
+          }
+        };
+
+    ArrayDeque<Runnable> queue = INLINE_DISPATCH.get();
+    if (queue != null) {
+      queue.addLast(dispatch);
+      return;
+    }
+
+    queue = new ArrayDeque<>();
+    INLINE_DISPATCH.set(queue);
+    queue.addLast(dispatch);
     try {
-      listener.done(outcome);
-    } catch (Throwable t) {
-      realm.report(t);
+      Runnable next;
+      while ((next = queue.pollFirst()) != null) {
+        next.run();
+      }
+    } finally {
+      INLINE_DISPATCH.remove();
     }
   }
 
