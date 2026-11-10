@@ -19,6 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.codirex.clotho.support.ManualLane;
@@ -274,6 +275,39 @@ class JobChainTest {
 
     assertThat(ranSynchronously.get()).isTrue();
     assertThat(dependent.await()).isEqualTo(Outcome.success(11));
+  }
+
+  /**
+   * Cancellation of a pending parent must propagate through the active inline drain before a
+   * callback waits for the dependent, rather than blocking the thread that owns that drain.
+   */
+  @Test
+  void cancellationPropagationCanCompleteAnAwaitedDependentInsideInlineDispatch()
+      throws Exception {
+    Job<Integer> trigger = realm.launch(lane, cp -> 1);
+    Job<Integer> pending = realm.launch(lane, cp -> 2);
+    Job<Integer> dependent = pending.then(Lane.direct(), (value, cp) -> value + 1);
+    AtomicBoolean cancelled = new AtomicBoolean();
+    AtomicReference<Outcome<Integer>> awaited = new AtomicReference<>();
+    AtomicReference<Throwable> waitFailure = new AtomicReference<>();
+
+    trigger.onComplete(
+        Lane.direct(),
+        outcome -> {
+          cancelled.set(pending.cancel());
+          try {
+            awaited.set(dependent.await(250, TimeUnit.MILLISECONDS));
+          } catch (Throwable t) {
+            waitFailure.set(t);
+          }
+        });
+
+    lane.runAll();
+
+    assertThat(cancelled.get()).isTrue();
+    assertThat(waitFailure.get()).isNull();
+    assertThat(awaited.get()).isNotNull();
+    assertThat(awaited.get().isCancelled()).isTrue();
   }
 
   @Test
