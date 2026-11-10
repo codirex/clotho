@@ -66,6 +66,7 @@ final class JobImpl<T> implements Job<T> {
       this.cancellationPropagation = cancellationPropagation;
     }
 
+    /** Returns the framework-only propagation handler selected for the completed outcome. */
     Inline<T> propagationFor(Outcome<T> outcome) {
       if (outcome instanceof Outcome.Success<?>) {
         return successPropagation;
@@ -493,6 +494,7 @@ final class JobImpl<T> implements Job<T> {
     }
   }
 
+  /** Publishes the outcome, dispatches registered listeners, and releases realm membership. */
   private void finish(Outcome<T> outcome) {
     // A FAIL_FAST realm records the failure and cancels its jobs before anybody is woken up, so a
     // thread that returns from await() sees realm.failure() set. Only the report to the
