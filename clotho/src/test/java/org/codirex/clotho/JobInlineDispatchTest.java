@@ -199,7 +199,7 @@ class JobInlineDispatchTest {
           parent.cancel();
           try {
             result.set(dependent.await(timeout, TimeUnit.NANOSECONDS));
-          } catch (InterruptedException interrupted) {
+          } catch (InterruptedException | TimeoutException interrupted) {
             Thread.currentThread().interrupt();
             throw new AssertionError(interrupted);
           }
