@@ -135,12 +135,29 @@ public final class Cadence {
    */
   TimerEntry schedule(long deadlineNanos, Timeout timeout) {
     Objects.requireNonNull(timeout, "timeout");
+    if (manual) {
+      TimerWheel.Scheduled scheduled = wheel.schedule(deadlineNanos, timeout);
+      return scheduled == null ? null : scheduled.entry;
+    }
+    // The timer thread is started after the wheel accepted the timer. The submission stays open
+    // until that thread is counted in the engine, so Engine.shutdown() cannot finish, and the
+    // engine cannot report termination, while the thread is about to start.
+    try {
+      engine.enterSubmit();
+    } catch (LaneClosedException e) {
+      return null;
+    }
+    try {
+      return scheduleAndWake(deadlineNanos, timeout);
+    } finally {
+      engine.exitSubmit();
+    }
+  }
+
+  private TimerEntry scheduleAndWake(long deadlineNanos, Timeout timeout) {
     TimerWheel.Scheduled scheduled = wheel.schedule(deadlineNanos, timeout);
     if (scheduled == null) {
       return null;
-    }
-    if (manual) {
-      return scheduled.entry;
     }
     if (scheduled.startThread) {
       try {

@@ -43,12 +43,22 @@ public final class Engine implements AutoCloseable {
     static final Engine GLOBAL = new Builder().name("clotho-global").buildInternal(true);
   }
 
+  /**
+   * Creates the threads of an engine. A seam for the tests, which hold a thread back at a chosen
+   * point of its creation; it is not part of the public API.
+   */
+  @FunctionalInterface
+  interface ThreadMaker {
+    Thread make(Runnable body, String name);
+  }
+
   private final String name;
   private final boolean global;
   private final LongSupplier ticker;
   private final long agingStepNanos;
   private final boolean daemon;
   private final Thread.UncaughtExceptionHandler errorHandler;
+  private final ThreadMaker threadMaker;
   private final PoolLane compute;
   private final PoolLane io;
   private final Cadence cadence;
@@ -59,6 +69,7 @@ public final class Engine implements AutoCloseable {
   private final ReentrantLock termLock = new ReentrantLock();
   private final Condition termCond = termLock.newCondition();
   private volatile boolean shutdown;
+  private volatile boolean shutdownComplete;
 
   private Engine(Builder b, boolean global) {
     this.name = b.name;
@@ -67,6 +78,7 @@ public final class Engine implements AutoCloseable {
     this.agingStepNanos = b.agingStepNanos;
     this.daemon = b.daemon;
     this.errorHandler = b.errorHandler;
+    this.threadMaker = b.threadMaker;
     this.compute =
         new PoolLane(
             this,
@@ -121,6 +133,7 @@ public final class Engine implements AutoCloseable {
     private boolean manualTimers;
     private boolean daemon = true;
     private Thread.UncaughtExceptionHandler errorHandler = Builder::printError;
+    private ThreadMaker threadMaker;
 
     private Builder() {}
 
@@ -307,6 +320,17 @@ public final class Engine implements AutoCloseable {
     }
 
     /**
+     * Replaces how the engine creates its threads. For the tests only (package-private).
+     *
+     * @param maker creates a thread for a body and a name
+     * @return this builder
+     */
+    Builder threadMaker(ThreadMaker maker) {
+      this.threadMaker = Objects.requireNonNull(maker, "maker");
+      return this;
+    }
+
+    /**
      * Creates the engine. No thread is started until work arrives.
      *
      * @return a new private engine
@@ -472,7 +496,10 @@ public final class Engine implements AutoCloseable {
    * @return {@code true} when terminated
    */
   public boolean isTerminated() {
-    return shutdown && live.get() == 0;
+    // Not just "shutdown": while shutdown() is still running, a submission accepted before it began
+    // may be about to start a thread that is not counted yet. Rejected submissions touch neither
+    // the flag nor the count, so once this is true it stays true.
+    return shutdownComplete && live.get() == 0;
   }
 
   /**
@@ -534,6 +561,11 @@ public final class Engine implements AutoCloseable {
     for (ManagedLane lane : managed) {
       lane.onShutdown();
     }
+    // Everything accepted before the flag has been handled: the submissions in flight are done and
+    // their threads are counted, and the lanes that guard themselves with their own lock have been
+    // through it. No submission can start a thread any more; a worker only starts a replacement
+    // before it ends itself. So the count of live threads reaches zero once and stays there.
+    shutdownComplete = true;
     signalTermination();
   }
 
@@ -662,7 +694,8 @@ public final class Engine implements AutoCloseable {
   }
 
   Thread newThread(Runnable body, String threadName) {
-    Thread t = new Thread(body, threadName);
+    Thread t =
+        threadMaker != null ? threadMaker.make(body, threadName) : new Thread(body, threadName);
     t.setDaemon(daemon);
     return t;
   }
