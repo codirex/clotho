@@ -140,9 +140,12 @@ final class JobImpl<T> implements Job<T> {
     LaneContext.checkMayBlock();
     long timeoutNanos = unit.toNanos(timeout);
     long startedNanos = System.nanoTime();
-    drainInlineDispatchUntil(done, timeoutNanos, startedNanos);
+    if (drainInlineDispatchUntil(done, timeoutNanos, startedNanos)) {
+      return outcomeOf(state.get());
+    }
     long remainingNanos = timeoutNanos - (System.nanoTime() - startedNanos);
-    if (!done.await(Math.max(0L, remainingNanos), TimeUnit.NANOSECONDS)) {
+    if (remainingNanos <= 0
+        || !done.await(remainingNanos, TimeUnit.NANOSECONDS)) {
       throw new TimeoutException("job not done after " + timeout + " " + unit);
     }
     return outcomeOf(state.get());
@@ -463,32 +466,36 @@ final class JobImpl<T> implements Job<T> {
    * <p>This lets cancellation and failure propagation reach a dependent before its callback waits
    * for that dependent, without recursively dispatching long listener chains.
    */
-  private static void drainInlineDispatchUntil(
+  private static boolean drainInlineDispatchUntil(
       CountDownLatch target, long timeoutNanos, long startedNanos) {
+    if (target.getCount() == 0) {
+      return true;
+    }
     if (timeoutNanos <= 0) {
-      return;
+      return false;
     }
     ArrayDeque<Runnable> queue = INLINE_DISPATCH.get();
     if (queue == null) {
-      return;
+      return false;
     }
     while (target.getCount() != 0) {
       if (Thread.currentThread().isInterrupted()) {
-        return;
+        return false;
       }
       Runnable next = queue.pollFirst();
       if (next == null) {
-        return;
+        return target.getCount() == 0;
       }
       next.run();
-      if (target.getCount() == 0) {
-        return;
-      }
       if (timeoutNanos != Long.MAX_VALUE
           && System.nanoTime() - startedNanos >= timeoutNanos) {
-        return;
+        return false;
+      }
+      if (target.getCount() == 0) {
+        return true;
       }
     }
+    return true;
   }
 
   /** Runs a listener registered after completion without deferring it behind the active drain. */
