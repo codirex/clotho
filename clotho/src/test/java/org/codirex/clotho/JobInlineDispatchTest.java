@@ -307,4 +307,39 @@ class JobInlineDispatchTest {
 
     assertThat(contexts).containsExactly(forbidden, null);
   }
+
+  /**
+   * A handler rethrowing the callback failure must not strand the inline queue on a reused thread.
+   */
+  @Test
+  void handlerRethrowingQueuedCallbackFailureDoesNotPoisonLaterInlineDispatch() {
+    Realm throwingRealm =
+        Realm.builder("throwing-inline-handler")
+            .uncaughtHandler(
+                (r, error) -> {
+                  throw (RuntimeException) error;
+                })
+            .open();
+    RuntimeException callbackFailure = new IllegalStateException("callback");
+    JobImpl<Integer> parent = JobImpl.create(throwingRealm, true, Priority.NORMAL);
+    Job<Integer> dependent = parent.then(Lane.direct(), (value, cp) -> value);
+    dependent.onComplete(
+        Lane.direct(),
+        outcome -> {
+          throw callbackFailure;
+        });
+
+    parent.completeIfPending(Outcome.failure(new IllegalArgumentException("parent")));
+
+    assertThat(dependent.outcomeOrNull().isFailure()).isTrue();
+    assertThat(throwingRealm.outstanding()).isZero();
+    throwingRealm.close();
+
+    JobImpl<Integer> later = pending();
+    AtomicBoolean laterCallbackRan = new AtomicBoolean();
+    later.addInline(outcome -> laterCallbackRan.set(true));
+    later.completeIfPending(Outcome.success(1));
+
+    assertThat(laterCallbackRan).isTrue();
+  }
 }
