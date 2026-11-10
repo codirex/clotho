@@ -133,7 +133,12 @@ final class JobImpl<T> implements Job<T> {
     return s instanceof Outcome<?> ? outcomeOf(s) : null;
   }
 
-  /** Waits for completion, pumping queued inline propagation when called from its active drain. */
+  /**
+   * Waits for completion, pumping queued inline propagation when called from its active drain.
+   *
+   * @throws BlockingNotAllowedException if the current lane forbids blocking or the caller is on
+   *     the installed main thread
+   */
   @Override
   public Outcome<T> await() throws InterruptedException {
     LaneContext.checkMayBlock();
@@ -142,7 +147,15 @@ final class JobImpl<T> implements Job<T> {
     return outcomeOf(state.get());
   }
 
-  /** Waits up to the timeout, including time spent pumping this thread's inline dispatch queue. */
+  /**
+   * Waits for completion, counting time spent pumping this thread's inline dispatch queue toward
+   * the timeout. A listener already running is not interrupted at the deadline; if the job
+   * completes during that listener, completion is checked before the elapsed time.
+   *
+   * @throws BlockingNotAllowedException if the current lane forbids blocking or the caller is on
+   *     the installed main thread
+   * @throws NullPointerException if {@code unit} is null
+   */
   @Override
   public Outcome<T> await(long timeout, TimeUnit unit)
       throws InterruptedException, TimeoutException {
@@ -321,7 +334,10 @@ final class JobImpl<T> implements Job<T> {
     }
   }
 
-  /** Adds a completion listener, running it immediately when the job is already done. */
+  /**
+   * Adds a completion listener. If completion has closed the listener list, runs it synchronously
+   * before returning. Listener failures are reported to the realm.
+   */
   void addInline(Inline<T> listener) {
     Node<T> node = new Node<>(listener);
     for (; ; ) {
@@ -479,6 +495,14 @@ final class JobImpl<T> implements Job<T> {
    *
    * <p>This lets cancellation and failure propagation reach a dependent before its callback waits
    * for that dependent, without recursively dispatching long listener chains.
+   *
+   * @param timeoutNanos the timeout in nanoseconds; {@link Long#MAX_VALUE} disables elapsed-time
+   *     checks while draining
+   * @param startedNanos the timeout start time from {@link System#nanoTime()}
+   * @return {@code COMPLETED} if the target is observed released; {@code TIMED_OUT} for a
+   *     nonpositive timeout or an expired timeout after a listener, if the target was unreleased at
+   *     the preceding check; or {@code EMPTY} if no drain is active, its queue is empty, or the
+   *     thread is interrupted
    */
   private static InlineDrainResult drainInlineDispatchUntil(
       CountDownLatch target, long timeoutNanos, long startedNanos) {
@@ -511,7 +535,10 @@ final class JobImpl<T> implements Job<T> {
     return InlineDrainResult.COMPLETED;
   }
 
-  /** Runs a listener registered after completion without deferring it behind the active drain. */
+  /**
+   * Runs a listener registered after completion without deferring it behind the active drain.
+   * Listener failures are reported to the realm.
+   */
   private void runListenerImmediately(Inline<T> listener, Outcome<T> outcome) {
     try {
       listener.done(outcome);
@@ -523,6 +550,7 @@ final class JobImpl<T> implements Job<T> {
   /**
    * Dispatches a completion-time listener iteratively, preserving the lane context in which it was
    * reached even when a reentrant completion is drained after the current lane task returns.
+   * Listener failures are reported to the realm.
    */
   private void runListener(Inline<T> listener, Outcome<T> outcome) {
     Lane context = LaneContext.current();

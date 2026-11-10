@@ -52,7 +52,8 @@ final class LaneContext {
 
   /**
    * Runs with an explicitly captured lane context, including a captured absence of context, then
-   * restores the context that was active on entry.
+   * restores the context that was active on entry, even if the task throws. Task exceptions
+   * propagate to the caller.
    */
   static void runWith(Lane lane, Runnable task) {
     Lane previous = CURRENT.get();
