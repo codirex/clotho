@@ -197,7 +197,12 @@ class JobInlineDispatchTest {
     trigger.addInline(
         outcome -> {
           parent.cancel();
-          result.set(dependent.await(timeout, TimeUnit.NANOSECONDS));
+          try {
+            result.set(dependent.await(timeout, TimeUnit.NANOSECONDS));
+          } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(interrupted);
+          }
           assertThat(dependent.isDone()).isTrue();
         });
 
