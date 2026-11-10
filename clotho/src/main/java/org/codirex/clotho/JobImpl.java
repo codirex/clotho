@@ -527,8 +527,8 @@ final class JobImpl<T> implements Job<T> {
 
   /**
    * Drains framework-only outcome propagation iteratively, then releases any application listeners
-   * that were queued by jobs completed during propagation. This prevents a long continuation
-   * chain from recursing and keeps application callbacks out of the propagation phase.
+   * that were queued by jobs completed during propagation. This prevents a long continuation chain
+   * from recursing and keeps application callbacks out of the propagation phase.
    */
   private void runPropagationListener(Inline<T> listener, Outcome<T> outcome) {
     Lane context = LaneContext.current();
