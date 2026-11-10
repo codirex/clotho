@@ -33,14 +33,16 @@ also discard its pending timers and end its thread.
 - `shutdown()` sets the flag and then waits for the submissions that were already in progress, so
   after it returns no new task is accepted and no submission starts a thread any more. A submission
   in progress includes the start of the timer thread.
-- **A pool worker that is ending may start one replacement worker.** A worker ends when it retires
-  after the keep-alive time, when it sees the shutdown with nothing queued, or when its loop fails.
-  If a task is still queued at that moment, it starts one replacement worker to run it. This is how
-  a task accepted before the shutdown is still run when it arrived while the last worker was ending:
-  the submitter counted on that worker and did not start another one, and without the handover the
-  task would stay queued with no worker. So a thread can start after `shutdown()` returned, but only
-  to run a task that was accepted before, and never because of a new submission. (`shutdownNow()`
-  discards the queued tasks, so there is nothing to hand over.)
+- **A pool worker that is ending may hand queued work to another worker.** A worker ends when it
+  retires after the keep-alive time, when it sees the shutdown with nothing queued, or when its loop
+  fails. If tasks remain queued, it first tries to wake an idle worker. If none is available, it
+  attempts to start a replacement, provided the pool has capacity. This handoff matters when a task
+  was accepted while the last worker was still counted: the submitter relied on that worker and did
+  not start another one. A thread can therefore start after `shutdown()` returned, but only as part
+  of handing off work accepted before shutdown, never because of a new submission. The replacement
+  is an attempt, not an unconditional guarantee; when another worker is already available or
+  starting, that worker can drain the queue instead. (`shutdownNow()` discards queued tasks, so
+  there is nothing to hand over.)
 - **The handover keeps the thread count correct.** The replacement is counted by `liveThreads()`
   before the worker that started it ends, so the count never drops to zero in between, and
   `isTerminated()` stays `false` until the replacement has run the task and ended too.
