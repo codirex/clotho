@@ -305,7 +305,7 @@ final class JobImpl<T> implements Job<T> {
     for (; ; ) {
       Node<T> head = listeners.get();
       if (head == DONE) {
-        runListener(listener, outcomeOf(state.get()));
+        runListenerImmediately(listener, outcomeOf(state.get()));
         return;
       }
       node.next = head;
@@ -452,15 +452,32 @@ final class JobImpl<T> implements Job<T> {
     realm.untrack(this);
   }
 
+  /** Runs a listener registered after completion without deferring it behind the active drain. */
+  private void runListenerImmediately(Inline<T> listener, Outcome<T> outcome) {
+    try {
+      listener.done(outcome);
+    } catch (Throwable t) {
+      realm.report(t);
+    }
+  }
+
+  /**
+   * Dispatches a completion-time listener iteratively, preserving the lane context in which it was
+   * reached even when a reentrant completion is drained after the current lane task returns.
+   */
   private void runListener(Inline<T> listener, Outcome<T> outcome) {
+    Lane context = LaneContext.current();
     Runnable dispatch =
-        () -> {
-          try {
-            listener.done(outcome);
-          } catch (Throwable t) {
-            realm.report(t);
-          }
-        };
+        () ->
+            LaneContext.runWith(
+                context,
+                () -> {
+                  try {
+                    listener.done(outcome);
+                  } catch (Throwable t) {
+                    realm.report(t);
+                  }
+                });
 
     ArrayDeque<Runnable> queue = INLINE_DISPATCH.get();
     if (queue != null) {
