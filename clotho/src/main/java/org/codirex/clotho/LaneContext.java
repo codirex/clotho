@@ -28,6 +28,7 @@ final class LaneContext {
   /** Runs the task with {@code lane} as the current lane (unless the lane inherits). */
   static void runIn(Lane lane, Runnable task) {
     if (lane.blockingPolicy() == BlockingPolicy.INHERIT) {
+      // INHERIT lanes are never stored in CURRENT; they preserve the effective caller context.
       task.run();
       return;
     }
