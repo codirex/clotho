@@ -198,7 +198,8 @@ Realm custom = Realm.builder("name")
 | `failure()`, `isClosing()`, `isClosed()`, `outstanding()`, `name()`, `policy()`, `cadence()` | Inspection |
 
 **Membership is total.** Every job (including the result of `then`, `zip`, `race`, and the losers of a
-race) belongs to exactly one realm for its whole life. A realm is one atomic counter of outstandingjobs and callbacks plus a closing flag, so every operation is either accepted and will be waited
+race) belongs to exactly one realm for its whole life. A realm is one atomic counter of outstanding
+jobs and callbacks plus a closing flag, so every operation is either accepted and will be waited
 for, or throws `RealmClosedException`. Nothing is lost in between.
 
 ### Job and Outcome
@@ -397,7 +398,8 @@ Engine engine = Engine.builder()
 
 | `RejectionPolicy` | When the queue is full |
 |---|---|
-| `REJECT` | Throws `RejectedExecutionException`; the job ends as `Failure` || `DROP_OLDEST` | The longest-waiting task is removed and never runs; its job ends as `Failure(DroppedException)`; the new task is queued |
+| `REJECT` | Throws `RejectedExecutionException`; the job ends as `Failure` |
+| `DROP_OLDEST` | The longest-waiting task is removed and never runs; its job ends as `Failure(DroppedException)`; the new task is queued |
 | `CALLER_RUNS` | The submitting thread runs it, **only if that is safe** for blocking. Unknown callers (plain threads, UI thread) are rejected. The main thread is never used to run pool work |
 
 Serial and single lanes accept `REJECT` and `DROP_OLDEST`. `CALLER_RUNS` would break their ordering and
@@ -596,6 +598,7 @@ try (TestScheduler s = new TestScheduler()) {
 - `advance(d)` stops at every timer on the way, so each periodic run happens at its own time.
 - `jump(d)` moves time in one step like a device that slept (late timers fire once, fixed-rate jobs
   skip missed slots).
+
 Under the hood the core exposes `Engine.Builder.manualTimers()`, `Cadence.runDue()` and
 `Cadence.nextDueNanos()`: timers without a thread, driven by the engine clock. These exact tests already
 found one real bug (a fixed-rate slot run twice) during development.
