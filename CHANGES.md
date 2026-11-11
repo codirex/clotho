@@ -14,7 +14,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versioning follo
 ### Fixed
 - `Lane.direct()` continuation dispatch now drains queued callbacks iteratively, preventing stack overflow in deeply chained continuations while preserving synchronous dispatch semantics.
 - Preserve each queued continuation's captured `LaneContext`, including `BlockingPolicy.FORBIDDEN`; `Job.await()` remains a non-dispatching wait.
-- Close the pool worker-retirement/submission handoff race: work accepted before shutdown is handed to a replacement worker exactly once, and termination waits for that worker.
+- Make graceful engine shutdown wait for submissions already in flight, including timer-thread startup, before reporting termination.
+- Add deterministic regression coverage for the last-worker retirement/submission race, verifying that an accepted task is handed to a replacement worker exactly once and prevents premature termination.
+- Avoid self-suppression when an `UncaughtHandler` rethrows the same failure it was asked to report.
 
 ### Build
 - Enforce JaCoCo minimums for JVM library modules: 90% line coverage and 80% branch coverage.
