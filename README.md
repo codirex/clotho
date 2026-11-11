@@ -108,7 +108,7 @@ timer wheel and its own job state machine, and it specifies the behaviour in wri
 
 ```kotlin
 dependencies {
-    implementation(platform("org.codirex.clotho:clotho-bom:0.1.0-alpha01"))
+    implementation(platform("org.codirex.clotho:clotho-bom:0.1.0-alpha02"))
     implementation("org.codirex.clotho:clotho")           // JVM and Android core
     implementation("org.codirex.clotho:clotho-android")   // Android: main lane + lifecycle realms
     testImplementation("org.codirex.clotho:clotho-test")  // deterministic test tools
