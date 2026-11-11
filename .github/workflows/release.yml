@@ -58,7 +58,7 @@ jobs:
       - run: chmod +x gradlew
 
       - name: Build and test everything that is published
-        run: ./gradlew :clotho:build :clotho-test:build :clotho-android:build --stacktrace
+        run: ./gradlew :clotho:build :clotho-test:build :clotho-android:build :clotho-bom:build --stacktrace
 
       - name: Restore the signing key ring
         env:
