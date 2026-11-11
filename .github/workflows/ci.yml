@@ -104,3 +104,16 @@ jobs:
               exit 1
             fi
           done
+          python - "$HOME/.m2/repository/org/codirex/clotho/clotho-bom/$version/clotho-bom-$version.pom" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          ns = {"m": "http://maven.apache.org/POM/4.0.0"}
+          root = ET.parse(sys.argv[1]).getroot()
+          android = root.find(
+              "./m:dependencyManagement/m:dependencies/m:dependency[m:artifactId='clotho-android']",
+              ns,
+          )
+          if android is None or android.findtext("m:type", namespaces=ns) != "aar":
+              raise SystemExit("BOM must publish clotho-android with Maven type aar")
+          PY
