@@ -63,12 +63,14 @@ class EngineWorkerRetirementRaceTest extends EngineTestBase {
 
       // The retiring worker has already left the idle stack but is still counted. The submission
       // is accepted, but cannot start a second worker while the configured maximum is one.
-      engine.io().execute(
-          () -> {
-            taskThread.set(Thread.currentThread());
-            runs.incrementAndGet();
-            submittedTaskRan.countDown();
-          });
+      engine
+          .io()
+          .execute(
+              () -> {
+                taskThread.set(Thread.currentThread());
+                runs.incrementAndGet();
+                submittedTaskRan.countDown();
+              });
       assertThat(engine.liveThreads()).isEqualTo(1);
       assertThat(submittedTaskRan.getCount()).isEqualTo(1);
 
