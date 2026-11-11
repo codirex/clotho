@@ -58,6 +58,7 @@ public class Timers {
     public ScheduledThreadPoolExecutor keepCancelled;
     public ScheduledThreadPoolExecutor removeCancelled;
 
+    /** Creates matching scheduled executors for the current benchmark pool-size parameter. */
     @Setup
     public void setUp() {
       int n = poolThreads > 0 ? poolThreads : Runtime.getRuntime().availableProcessors();
