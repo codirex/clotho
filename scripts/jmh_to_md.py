@@ -73,7 +73,7 @@ def main():
             if sample:
                 pc = pm.get("scorePercentiles", {})
                 line += " " + " | ".join(fmt(pc.get(k, float("nan"))) for k in ("50.0", "99.0", "99.9")) + " |"
-            alloc = r.get("secondaryMetrics", {}).get("·gc.alloc.rate.norm", {}).get("score")
+            alloc = r.get("secondaryMetrics", {}).get("gc.alloc.rate.norm", {}).get("score")
             line += f" {fmt(alloc) if alloc is not None else 'n/a'} |"
             out.append(line)
         out.append("")
