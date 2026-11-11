@@ -700,6 +700,7 @@ clotho-framework/
 ├── clotho/            Core (pure Java): Realm, Job, Lane, Engine, Cadence, Cell
 ├── clotho-android/    Android: main lane, startup initializer, lifecycle realms
 ├── clotho-test/       Test tools: TestClock, DeterministicLane, TestScheduler, ...
+├── clotho-bom/        Published platform constraining all Clotho module versions
 ├── clotho-jcstress/   10 jcstress scenarios      (opt-in: -PwithJcstress)
 ├── clotho-bench/      JMH benchmarks             (opt-in: -PwithBench)
 ├── app/               Sample Android app
@@ -743,7 +744,7 @@ Building the `app` sample needs Android SDK 37. Optional modules:
 queues), Android (main lane, lifecycle realms), timers (`Cadence`) and `Cell`, test tools
 (`clotho-test`), stress tests and jcstress scenarios, JMH benchmarks, CI and Maven Central publishing.
 
-**Still open before a stable release:** a recorded benchmark run, coverage gates, a BOM.
+**Still open before a stable release:** a current release-candidate benchmark run and coverage gates.
 
 **Later:** `Flow` (value streams, after the first stable release); `clotho-ktx` (optional Kotlin
 extensions).
