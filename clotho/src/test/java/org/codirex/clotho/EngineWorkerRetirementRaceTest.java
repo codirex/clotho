@@ -20,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 /** Covers a submission racing with the last worker's keep-alive retirement. */
@@ -31,6 +32,8 @@ class EngineWorkerRetirementRaceTest extends EngineTestBase {
     CountDownLatch releaseRetirement = new CountDownLatch(1);
     CountDownLatch submittedTaskRan = new CountDownLatch(1);
     AtomicInteger runs = new AtomicInteger();
+    AtomicReference<Thread> retiringThread = new AtomicReference<>();
+    AtomicReference<Thread> taskThread = new AtomicReference<>();
 
     Engine engine =
         track(
@@ -39,6 +42,7 @@ class EngineWorkerRetirementRaceTest extends EngineTestBase {
                 .ioKeepAlive(1, TimeUnit.MILLISECONDS)
                 .workerRetirementHook(
                     () -> {
+                      retiringThread.set(Thread.currentThread());
                       retiring.countDown();
                       try {
                         if (!releaseRetirement.await(20, TimeUnit.SECONDS)) {
@@ -61,6 +65,7 @@ class EngineWorkerRetirementRaceTest extends EngineTestBase {
       // is accepted, but cannot start a second worker while the configured maximum is one.
       engine.io().execute(
           () -> {
+            taskThread.set(Thread.currentThread());
             runs.incrementAndGet();
             submittedTaskRan.countDown();
           });
@@ -79,6 +84,7 @@ class EngineWorkerRetirementRaceTest extends EngineTestBase {
     assertThat(submittedTaskRan.await(20, TimeUnit.SECONDS)).isTrue();
     assertThat(engine.awaitTermination(20, TimeUnit.SECONDS)).isTrue();
     assertThat(runs.get()).isEqualTo(1);
+    assertThat(taskThread.get()).isNotSameAs(retiringThread.get());
     assertThat(engine.liveThreads()).isZero();
   }
 }
