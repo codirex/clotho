@@ -106,6 +106,18 @@ timer wheel and its own job state machine, and it specifies the behaviour in wri
 
 ## Installation
 
+Until `0.1.0-alpha02` is published, use the `0.1.0-alpha01` coordinates:
+
+```kotlin
+dependencies {
+    implementation("org.codirex.clotho:clotho:0.1.0-alpha01")
+    implementation("org.codirex.clotho:clotho-android:0.1.0-alpha01")
+    testImplementation("org.codirex.clotho:clotho-test:0.1.0-alpha01")
+}
+```
+
+Starting with `0.1.0-alpha02`, import `clotho-bom` to align all published module versions:
+
 ```kotlin
 dependencies {
     implementation(platform("org.codirex.clotho:clotho-bom:0.1.0-alpha02"))
@@ -115,7 +127,7 @@ dependencies {
 }
 ```
 
-Starting with `0.1.0-alpha02`, import `clotho-bom` to align all published module versions. The BOM and all three modules are released together.
+The BOM and all three modules are released together.
 
 The current development version is `0.1.0-alpha02`. Artifacts are published to Maven Central under the
 group `org.codirex.clotho` (see [CONTRIBUTING](docs/CONTRIBUTING.md) for the release process).
@@ -667,7 +679,7 @@ the release commit. See
 [docs/TESTING.md](docs/TESTING.md) for what each kind of test proves and what is not covered.
 
 CI (GitHub Actions) runs the JVM modules on JDK 17 and 21, the Android module, a publishing dry run,
-JCStress actor compilation and benchmark compilation on every push and pull request. Full JCStress
+JCStress actor compilation and benchmark compilation on pushes to `main` and on pull requests. Full JCStress
 and benchmark campaigns remain manual workflows.
 
 ---
