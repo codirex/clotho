@@ -66,12 +66,17 @@ class EngineWorkerRetirementRaceTest extends EngineTestBase {
           });
       assertThat(engine.liveThreads()).isEqualTo(1);
       assertThat(submittedTaskRan.getCount()).isEqualTo(1);
+
+      // Shutdown rejects future submissions but must preserve this accepted task and must not
+      // report termination while the retiring worker still owns the handoff.
+      engine.shutdown();
+      assertThat(engine.isTerminated()).isFalse();
+      assertThat(engine.liveThreads()).isEqualTo(1);
     } finally {
       releaseRetirement.countDown();
     }
 
     assertThat(submittedTaskRan.await(20, TimeUnit.SECONDS)).isTrue();
-    engine.shutdown();
     assertThat(engine.awaitTermination(20, TimeUnit.SECONDS)).isTrue();
     assertThat(runs.get()).isEqualTo(1);
     assertThat(engine.liveThreads()).isZero();
