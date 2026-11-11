@@ -28,7 +28,7 @@ try (Realm realm = Realm.open("checkout")) {
 }
 ```
 
-> **Status: pre-release (`0.1.0-alpha01`).** Core, engine, main lane, lifecycle realms, timers,
+> **Status: pre-release (`0.1.0-alpha02`).** Core, engine, main lane, lifecycle realms, timers,
 > `Cell` and the test tools exist and are tested. `Flow` (value streams) comes after the first stable
 > release. The public API can still change. See [Roadmap](#roadmap).
 
