@@ -59,6 +59,7 @@ public final class Engine implements AutoCloseable {
   private final boolean daemon;
   private final Thread.UncaughtExceptionHandler errorHandler;
   private final ThreadMaker threadMaker;
+  private final Runnable workerRetirementHook;
   private final PoolLane compute;
   private final PoolLane io;
   private final Cadence cadence;
@@ -79,6 +80,7 @@ public final class Engine implements AutoCloseable {
     this.daemon = b.daemon;
     this.errorHandler = b.errorHandler;
     this.threadMaker = b.threadMaker;
+    this.workerRetirementHook = b.workerRetirementHook;
     this.compute =
         new PoolLane(
             this,
@@ -134,6 +136,7 @@ public final class Engine implements AutoCloseable {
     private boolean daemon = true;
     private Thread.UncaughtExceptionHandler errorHandler = Builder::printError;
     private ThreadMaker threadMaker;
+    private Runnable workerRetirementHook = () -> {};
 
     private Builder() {}
 
@@ -327,6 +330,15 @@ public final class Engine implements AutoCloseable {
      */
     Builder threadMaker(ThreadMaker maker) {
       this.threadMaker = Objects.requireNonNull(maker, "maker");
+      return this;
+    }
+
+    /**
+     * Pauses a worker immediately after it commits to keep-alive retirement. For deterministic
+     * retirement/submission race tests only; package-private and unset in production.
+     */
+    Builder workerRetirementHook(Runnable hook) {
+      this.workerRetirementHook = Objects.requireNonNull(hook, "hook");
       return this;
     }
 
@@ -678,6 +690,10 @@ public final class Engine implements AutoCloseable {
 
   long agingStepNanos() {
     return agingStepNanos;
+  }
+
+  void beforeWorkerRetirement() {
+    workerRetirementHook.run();
   }
 
   /** Enters a submission; throws if the engine is shut down. Pair with {@link #exitSubmit()}. */
