@@ -58,7 +58,7 @@ public class EngineSubmitVersusShutdown {
 
   @Arbiter
   public void arbiter(III_Result r) throws InterruptedException {
-    r.r2 = runs.get();
     r.r3 = engine.awaitTermination(5, TimeUnit.SECONDS) ? 1 : 0;
+    r.r2 = runs.get();
   }
 }
