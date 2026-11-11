@@ -98,7 +98,7 @@ jobs:
           for artifact in clotho clotho-test clotho-android clotho-bom; do
             pom="$HOME/.m2/repository/org/codirex/clotho/$artifact/$version/$artifact-$version.pom"
             test -f "$pom"
-            count="$(grep -c '<developer>' "$pom")"
+            count="$(grep -c '<developer>' "$pom" || true)"
             if [ "$count" -ne 1 ]; then
               echo "$artifact POM contains $count developer entries; expected exactly one."
               exit 1
