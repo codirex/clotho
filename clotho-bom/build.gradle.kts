@@ -18,27 +18,27 @@ publishing {
             val dependencyManagement =
                 root.children()
                     .filterIsInstance<groovy.util.Node>()
-                    .single { it.name() == "dependencyManagement" }
+                    .single { it.name().toString().substringAfterLast("}") == "dependencyManagement" }
             val dependencies =
                 dependencyManagement.children()
                     .filterIsInstance<groovy.util.Node>()
-                    .single { it.name() == "dependencies" }
+                    .single { it.name().toString().substringAfterLast("}") == "dependencies" }
             val androidConstraint =
                 dependencies.children()
                     .filterIsInstance<groovy.util.Node>()
                     .single { dependency ->
-                        dependency.name() == "dependency" &&
+                        dependency.name().toString().substringAfterLast("}") == "dependency" &&
                             dependency.children()
                                 .filterIsInstance<groovy.util.Node>()
                                 .any {
-                                    it.name() == "artifactId" && it.text() == "clotho-android"
+                                    it.name().toString().substringAfterLast("}") == "artifactId" && it.text() == "clotho-android"
                                 }
                     }
 
             if (
                 androidConstraint.children()
                     .filterIsInstance<groovy.util.Node>()
-                    .none { it.name() == "type" }
+                    .none { it.name().toString().substringAfterLast("}") == "type" }
             ) {
                 val typeNode = androidConstraint.appendNode("type", "aar")
                 @Suppress("UNCHECKED_CAST")
@@ -47,9 +47,9 @@ publishing {
                 val insertionIndex =
                     childNodes.indexOfFirst { child ->
                         child is groovy.util.Node &&
-                            (child.name() == "classifier" ||
-                                child.name() == "scope" ||
-                                child.name() == "optional")
+                            (child.name().toString().substringAfterLast("}") == "classifier" ||
+                                child.name().toString().substringAfterLast("}") == "scope" ||
+                                child.name().toString().substringAfterLast("}") == "optional")
                     }
                 if (insertionIndex >= 0) {
                     childNodes.add(insertionIndex, typeNode)
