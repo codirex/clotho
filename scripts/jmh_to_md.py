@@ -26,6 +26,7 @@ def fmt(x):
 
 
 def main():
+    """Load JMH results and print grouped Markdown performance tables."""
     results = json.load(open(sys.argv[1]))
     env = open(sys.argv[2]).read().strip() if len(sys.argv) > 2 else ""
 
