@@ -28,6 +28,7 @@ final class LaneContext {
   /** Runs the task with {@code lane} as the current lane (unless the lane inherits). */
   static void runIn(Lane lane, Runnable task) {
     if (lane.blockingPolicy() == BlockingPolicy.INHERIT) {
+      // INHERIT lanes are never stored in CURRENT; they preserve the effective caller context.
       task.run();
       return;
     }
@@ -47,6 +48,29 @@ final class LaneContext {
   /** Returns the lane whose task the current thread runs, or null if none is known. */
   static Lane current() {
     return CURRENT.get();
+  }
+
+  /**
+   * Runs with an explicitly captured lane context, including a captured absence of context, then
+   * restores the context that was active on entry, even if the task throws. Task exceptions
+   * propagate to the caller.
+   */
+  static void runWith(Lane lane, Runnable task) {
+    Lane previous = CURRENT.get();
+    if (lane == null) {
+      CURRENT.remove();
+    } else {
+      CURRENT.set(lane);
+    }
+    try {
+      task.run();
+    } finally {
+      if (previous == null) {
+        CURRENT.remove();
+      } else {
+        CURRENT.set(previous);
+      }
+    }
   }
 
   /** Throws if the current lane forbids blocking. */

@@ -19,6 +19,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.codirex.clotho.support.ManualLane;
@@ -235,6 +237,129 @@ class JobChainTest {
         .isInstanceOf(RealmClosedException.class);
     assertThatThrownBy(() -> a.onComplete(Lane.direct(), o -> {}))
         .isInstanceOf(RealmClosedException.class);
+  }
+
+  /** Verifies that a long sequence of direct-lane continuations is drained without recursion. */
+  @Test
+  void longDirectThenChainDoesNotOverflowTheStack() throws Exception {
+    int chainLength = 10_000;
+    Job<Integer> chain = realm.launch(lane, cp -> 0);
+    for (int i = 0; i < chainLength; i++) {
+      chain = chain.then(Lane.direct(), (value, cp) -> value + 1);
+    }
+
+    lane.runAll();
+
+    assertThat(chain.await()).isEqualTo(Outcome.success(chainLength));
+    assertThat(realm.outstanding()).isZero();
+  }
+
+  /**
+   * Completed-parent continuations registered from an active inline callback must still run before
+   * registration returns, so awaiting the dependent cannot wait on the current dispatch thread.
+   */
+  @Test
+  void continuationAddedToACompletedJobRunsBeforeReturningInsideInlineDispatch() throws Exception {
+    Job<Integer> completed = realm.launch(Lane.direct(), cp -> 10);
+    Job<Integer> trigger = realm.launch(lane, cp -> 1);
+    AtomicBoolean ranSynchronously = new AtomicBoolean();
+
+    Job<Integer> dependent =
+        trigger.then(
+            Lane.direct(),
+            (value, cp) -> {
+              Job<Integer> nested = completed.then(Lane.direct(), (v, c) -> v + 1);
+              ranSynchronously.set(nested.isDone());
+              return nested.isDone() ? nested.await().getOrThrow() : -1;
+            });
+
+    lane.runAll();
+
+    assertThat(ranSynchronously.get()).isTrue();
+    assertThat(dependent.await()).isEqualTo(Outcome.success(11));
+  }
+
+  /**
+   * Cancellation of a pending parent must propagate through the active inline drain before a
+   * callback waits for the dependent, rather than blocking the thread that owns that drain.
+   */
+  @Test
+  void cancellationPropagationCanCompleteAnAwaitedDependentInsideInlineDispatch() throws Exception {
+    Job<Integer> trigger = realm.launch(lane, cp -> 1);
+    Job<Integer> pending = realm.launch(lane, cp -> 2);
+    Job<Integer> dependent = pending.then(Lane.direct(), (value, cp) -> value + 1);
+    AtomicBoolean cancelled = new AtomicBoolean();
+    AtomicReference<Outcome<Integer>> awaited = new AtomicReference<>();
+    AtomicReference<Throwable> waitFailure = new AtomicReference<>();
+
+    trigger.onComplete(
+        Lane.direct(),
+        outcome -> {
+          cancelled.set(pending.cancel());
+          try {
+            awaited.set(dependent.await(250, TimeUnit.MILLISECONDS));
+          } catch (Throwable t) {
+            waitFailure.set(t);
+          }
+        });
+
+    lane.runAll();
+
+    assertThat(cancelled.get()).isTrue();
+    assertThat(waitFailure.get()).isNull();
+    assertThat(awaited.get()).isNotNull();
+    assertThat(awaited.get().isCancelled()).isTrue();
+  }
+
+  /** Cancellation propagation across a deep direct chain must also stay iterative. */
+  @Test
+  void longDirectThenChainPropagatesCancellationWithoutOverflowingTheStack() throws Exception {
+    int chainLength = 10_000;
+    Job<Integer> root = realm.launch(lane, cp -> 0);
+    Job<Integer> chain = root;
+    for (int i = 0; i < chainLength; i++) {
+      chain = chain.then(Lane.direct(), (value, cp) -> value + 1);
+    }
+
+    assertThat(realm.outstanding()).isEqualTo(chainLength + 1);
+    assertThat(root.cancel()).isTrue();
+
+    assertThat(chain.isDone()).isTrue();
+    assertThat(chain.await().isCancelled()).isTrue();
+    assertThat(realm.outstanding()).isZero();
+  }
+
+  /** A timed wait must not execute unrelated callbacks queued by an active inline dispatch. */
+  @Test
+  void timedAwaitDoesNotRunQueuedInlineCallbacks() throws Exception {
+    Job<Integer> trigger = realm.launch(lane, cp -> 1);
+    Job<Integer> callbackOwner = realm.launch(lane, cp -> 2);
+    Job<Integer> awaited = realm.launch(lane, cp -> 3);
+    AtomicBoolean callbackRan = new AtomicBoolean();
+    AtomicBoolean callbackRanBeforeTimeout = new AtomicBoolean();
+    AtomicBoolean timedOut = new AtomicBoolean();
+
+    callbackOwner.onComplete(Lane.direct(), outcome -> callbackRan.set(true));
+    trigger.onComplete(
+        Lane.direct(),
+        outcome -> {
+          callbackOwner.cancel();
+          try {
+            awaited.await(1, TimeUnit.MILLISECONDS);
+          } catch (TimeoutException expected) {
+            timedOut.set(true);
+          } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(interrupted);
+          }
+          callbackRanBeforeTimeout.set(callbackRan.get());
+        });
+
+    lane.runAll();
+
+    assertThat(timedOut.get()).isTrue();
+    assertThat(callbackRanBeforeTimeout.get()).isFalse();
+    assertThat(callbackRan.get()).isTrue();
   }
 
   @Test

@@ -15,6 +15,7 @@
  */
 package org.codirex.clotho;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -49,15 +50,46 @@ final class JobImpl<T> implements Job<T> {
 
   private static final class Node<T> {
     final Inline<T> listener;
+    final Inline<T> successPropagation;
+    final Inline<T> failurePropagation;
+    final Inline<T> cancellationPropagation;
     Node<T> next;
 
-    Node(Inline<T> listener) {
+    /** Creates a listener node with optional outcome-specific propagation handlers. */
+    Node(
+        Inline<T> listener,
+        Inline<T> successPropagation,
+        Inline<T> failurePropagation,
+        Inline<T> cancellationPropagation) {
       this.listener = listener;
+      this.successPropagation = successPropagation;
+      this.failurePropagation = failurePropagation;
+      this.cancellationPropagation = cancellationPropagation;
+    }
+
+    /** Returns the framework-only propagation handler selected for the completed outcome. */
+    Inline<T> propagationFor(Outcome<T> outcome) {
+      if (outcome instanceof Outcome.Success<?>) {
+        return successPropagation;
+      }
+      if (outcome instanceof Outcome.Failure<?>) {
+        return failurePropagation;
+      }
+      return cancellationPropagation;
     }
   }
 
   @SuppressWarnings("rawtypes")
-  private static final Node DONE = new Node<>(null);
+  private static final Node DONE = new Node<>(null, null, null, null);
+
+  /** Reentrant inline listeners are drained iteratively to bound continuation stack depth. */
+  private static final ThreadLocal<ArrayDeque<Runnable>> INLINE_DISPATCH = new ThreadLocal<>();
+
+  /**
+   * Internal outcome propagation is drained separately so it never has to execute user callbacks
+   * merely to settle a dependent job.
+   */
+  private static final ThreadLocal<ArrayDeque<Runnable>> PROPAGATION_DISPATCH = new ThreadLocal<>();
 
   private final Realm realm;
   private final boolean root;
@@ -122,6 +154,12 @@ final class JobImpl<T> implements Job<T> {
     return s instanceof Outcome<?> ? outcomeOf(s) : null;
   }
 
+  /**
+   * Blocks until the job completes. Waiting never executes queued application callbacks.
+   *
+   * @throws BlockingNotAllowedException if the current lane forbids blocking or the caller is on
+   *     the installed main thread
+   */
   @Override
   public Outcome<T> await() throws InterruptedException {
     LaneContext.checkMayBlock();
@@ -129,6 +167,14 @@ final class JobImpl<T> implements Job<T> {
     return outcomeOf(state.get());
   }
 
+  /**
+   * Blocks until the job completes or the timeout expires. Waiting never executes queued
+   * application callbacks.
+   *
+   * @throws BlockingNotAllowedException if the current lane forbids blocking or the caller is on
+   *     the installed main thread
+   * @throws NullPointerException if {@code unit} is null
+   */
   @Override
   public Outcome<T> await(long timeout, TimeUnit unit)
       throws InterruptedException, TimeoutException {
@@ -178,6 +224,7 @@ final class JobImpl<T> implements Job<T> {
     }
   }
 
+  /** Creates a dependent job that runs {@code step} only when this job succeeds. */
   @Override
   public <R> Job<R> then(Lane lane, Step<? super T, ? extends R> step) {
     Objects.requireNonNull(lane, "lane");
@@ -185,18 +232,20 @@ final class JobImpl<T> implements Job<T> {
     JobImpl<R> next = create(realm, false, priority);
     addInline(
         outcome -> {
-          if (outcome instanceof Outcome.Success<T> success) {
-            T value = success.value();
-            next.start(lane, cp -> step.apply(value, cp));
-          } else if (outcome instanceof Outcome.Failure<T> failure) {
-            next.completeIfPending(Outcome.failure(failure.cause()));
-          } else {
-            next.completeIfPending(Outcome.cancelled());
-          }
-        });
+          Outcome.Success<T> success = (Outcome.Success<T>) outcome;
+          T value = success.value();
+          next.start(lane, cp -> step.apply(value, cp));
+        },
+        null,
+        outcome -> {
+          Outcome.Failure<T> failure = (Outcome.Failure<T>) outcome;
+          next.completeIfPending(Outcome.failure(failure.cause()));
+        },
+        outcome -> next.completeIfPending(Outcome.cancelled()));
     return next;
   }
 
+  /** Creates a dependent job that runs {@code step} only when this job fails. */
   @Override
   public Job<T> recover(Lane lane, Step<? super Throwable, ? extends T> step) {
     Objects.requireNonNull(lane, "lane");
@@ -204,15 +253,16 @@ final class JobImpl<T> implements Job<T> {
     JobImpl<T> next = create(realm, false, priority);
     addInline(
         outcome -> {
-          if (outcome instanceof Outcome.Success<T> success) {
-            next.completeIfPending(Outcome.success(success.value()));
-          } else if (outcome instanceof Outcome.Failure<T> failure) {
-            Throwable cause = failure.cause();
-            next.start(lane, cp -> step.apply(cause, cp));
-          } else {
-            next.completeIfPending(Outcome.cancelled());
-          }
-        });
+          Outcome.Failure<T> failure = (Outcome.Failure<T>) outcome;
+          Throwable cause = failure.cause();
+          next.start(lane, cp -> step.apply(cause, cp));
+        },
+        outcome -> {
+          Outcome.Success<T> success = (Outcome.Success<T>) outcome;
+          next.completeIfPending(Outcome.success(success.value()));
+        },
+        null,
+        outcome -> next.completeIfPending(Outcome.cancelled()));
     return next;
   }
 
@@ -296,12 +346,38 @@ final class JobImpl<T> implements Job<T> {
     }
   }
 
+  /**
+   * Adds a completion listener. Outcomes that only settle a dependent are handled by the internal
+   * propagation trampoline; the ordinary listener is reserved for work that may enter application
+   * code. A listener added after completion still runs synchronously before this method returns.
+   */
   void addInline(Inline<T> listener) {
-    Node<T> node = new Node<>(listener);
+    addInline(listener, null, null, null);
+  }
+
+  /**
+   * Adds a listener with optional internal propagation paths for each outcome kind.
+   *
+   * <p>Propagation handlers must only settle framework-owned job state; they must not invoke
+   * application callbacks or run user steps.
+   */
+  void addInline(
+      Inline<T> listener,
+      Inline<T> successPropagation,
+      Inline<T> failurePropagation,
+      Inline<T> cancellationPropagation) {
+    Node<T> node =
+        new Node<>(listener, successPropagation, failurePropagation, cancellationPropagation);
     for (; ; ) {
       Node<T> head = listeners.get();
       if (head == DONE) {
-        runListener(listener, outcomeOf(state.get()));
+        Outcome<T> outcome = outcomeOf(state.get());
+        Inline<T> propagation = node.propagationFor(outcome);
+        if (propagation != null) {
+          runPropagationListener(propagation, outcome);
+        } else {
+          runListenerImmediately(listener, outcome);
+        }
         return;
       }
       node.next = head;
@@ -421,6 +497,7 @@ final class JobImpl<T> implements Job<T> {
     }
   }
 
+  /** Publishes the outcome, dispatches registered listeners, and releases realm membership. */
   private void finish(Outcome<T> outcome) {
     // A FAIL_FAST realm records the failure and cancels its jobs before anybody is woken up, so a
     // thread that returns from await() sees realm.failure() set. Only the report to the
@@ -437,22 +514,130 @@ final class JobImpl<T> implements Job<T> {
     }
     @SuppressWarnings("unchecked")
     Node<T> head = listeners.getAndSet(DONE);
-    List<Inline<T>> ordered = new ArrayList<>();
+    List<Node<T>> ordered = new ArrayList<>();
     for (Node<T> n = head; n != null; n = n.next) {
-      ordered.add(n.listener);
+      ordered.add(n);
     }
     Collections.reverse(ordered);
-    for (Inline<T> listener : ordered) {
-      runListener(listener, outcome);
+    for (Node<T> node : ordered) {
+      Inline<T> propagation = node.propagationFor(outcome);
+      if (propagation != null) {
+        runPropagationListener(propagation, outcome);
+      } else {
+        runListener(node.listener, outcome);
+      }
     }
     realm.untrack(this);
   }
 
-  private void runListener(Inline<T> listener, Outcome<T> outcome) {
+  /**
+   * Drains framework-only outcome propagation iteratively, then releases any application listeners
+   * that were queued by jobs completed during propagation. This prevents a long continuation chain
+   * from recursing and keeps application callbacks out of the propagation phase.
+   */
+  private void runPropagationListener(Inline<T> listener, Outcome<T> outcome) {
+    Lane context = LaneContext.current();
+    Runnable dispatch =
+        () ->
+            LaneContext.runWith(
+                context,
+                () -> {
+                  try {
+                    listener.done(outcome);
+                  } catch (Throwable t) {
+                    realm.report(t);
+                  }
+                });
+
+    ArrayDeque<Runnable> propagationQueue = PROPAGATION_DISPATCH.get();
+    boolean ownsPropagationQueue = propagationQueue == null;
+    if (ownsPropagationQueue) {
+      propagationQueue = new ArrayDeque<>();
+      PROPAGATION_DISPATCH.set(propagationQueue);
+    }
+
+    ArrayDeque<Runnable> inlineQueue = INLINE_DISPATCH.get();
+    boolean ownsInlineQueue = inlineQueue == null;
+    if (ownsInlineQueue) {
+      inlineQueue = new ArrayDeque<>();
+      INLINE_DISPATCH.set(inlineQueue);
+    }
+
+    propagationQueue.addLast(dispatch);
+    if (!ownsPropagationQueue) {
+      return;
+    }
+
+    try {
+      try {
+        Runnable next;
+        while ((next = propagationQueue.pollFirst()) != null) {
+          next.run();
+        }
+      } finally {
+        PROPAGATION_DISPATCH.remove();
+      }
+    } finally {
+      if (ownsInlineQueue) {
+        try {
+          Runnable next;
+          while ((next = inlineQueue.pollFirst()) != null) {
+            next.run();
+          }
+        } finally {
+          INLINE_DISPATCH.remove();
+        }
+      }
+    }
+  }
+
+  /**
+   * Runs a listener registered after completion without deferring it behind the active drain.
+   * Listener failures are reported to the realm.
+   */
+  private void runListenerImmediately(Inline<T> listener, Outcome<T> outcome) {
     try {
       listener.done(outcome);
     } catch (Throwable t) {
       realm.report(t);
+    }
+  }
+
+  /**
+   * Dispatches a completion-time listener iteratively, preserving the lane context in which it was
+   * reached even when a reentrant completion is drained after the current lane task returns.
+   * Listener failures are reported to the realm.
+   */
+  private void runListener(Inline<T> listener, Outcome<T> outcome) {
+    Lane context = LaneContext.current();
+    Runnable dispatch =
+        () ->
+            LaneContext.runWith(
+                context,
+                () -> {
+                  try {
+                    listener.done(outcome);
+                  } catch (Throwable t) {
+                    realm.report(t);
+                  }
+                });
+
+    ArrayDeque<Runnable> queue = INLINE_DISPATCH.get();
+    if (queue != null) {
+      queue.addLast(dispatch);
+      return;
+    }
+
+    queue = new ArrayDeque<>();
+    INLINE_DISPATCH.set(queue);
+    queue.addLast(dispatch);
+    try {
+      Runnable next;
+      while ((next = queue.pollFirst()) != null) {
+        next.run();
+      }
+    } finally {
+      INLINE_DISPATCH.remove();
     }
   }
 

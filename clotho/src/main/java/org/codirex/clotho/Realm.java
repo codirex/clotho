@@ -939,12 +939,15 @@ public final class Realm implements AutoCloseable {
     report(cause);
   }
 
+  /** Reports a callback or job failure without allowing handler failures to escape the realm. */
   void report(Throwable error) {
     UncaughtHandler h = handler != null ? handler : Clotho.defaultUncaughtHandler();
     try {
       h.uncaught(this, error);
     } catch (Throwable inner) {
-      inner.addSuppressed(error);
+      if (inner != error) {
+        inner.addSuppressed(error);
+      }
       inner.printStackTrace();
     }
   }

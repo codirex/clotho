@@ -76,6 +76,43 @@ class BlockingPolicyTest {
     assertThat(job.await().failureOrNull()).isInstanceOf(BlockingNotAllowedException.class);
   }
 
+  /**
+   * A listener queued by a nested forbidden inline lane must retain that policy when the outer
+   * allowed-lane completion drains it.
+   */
+  @Test
+  void queuedDirectCallbackRetainsTheNestedForbiddenLaneContext() throws Exception {
+    Lane forbiddenInline =
+        new Lane() {
+          @Override
+          public void execute(Runnable task) {
+            task.run();
+          }
+
+          @Override
+          public BlockingPolicy blockingPolicy() {
+            return BlockingPolicy.FORBIDDEN;
+          }
+        };
+    Job<String> parent = realm.launch(allowed, cp -> "parent");
+    Job<String> dependent = parent.then(forbiddenInline, (value, cp) -> "dependent");
+    AtomicReference<Throwable> seen = new AtomicReference<>();
+
+    dependent.onComplete(
+        Lane.direct(),
+        outcome -> {
+          try {
+            dependent.await();
+          } catch (Throwable t) {
+            seen.set(t);
+          }
+        });
+
+    allowed.runAll();
+
+    assertThat(seen.get()).isInstanceOf(BlockingNotAllowedException.class);
+  }
+
   @Test
   void theDecisionNeverDependsOnTheThreadName() throws Exception {
     Job<String> other = done();
