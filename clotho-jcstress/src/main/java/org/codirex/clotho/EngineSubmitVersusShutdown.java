@@ -31,9 +31,17 @@ import org.openjdk.jcstress.infra.results.III_Result;
  * a rejected task must never run.
  */
 @JCStressTest
-@Outcome(id = "0, 0, 1", expect = Expect.ACCEPTABLE, desc = "shutdown won: submission was rejected")
-@Outcome(id = "1, 1, 1", expect = Expect.ACCEPTABLE, desc = "submission won: accepted work drained")
-@Outcome(expect = Expect.FORBIDDEN, desc = "accepted work was lost or repeated, or engine did not terminate")
+@Outcome(
+    id = "0, 0, 1",
+    expect = Expect.ACCEPTABLE,
+    desc = "shutdown won: submission was rejected")
+@Outcome(
+    id = "1, 1, 1",
+    expect = Expect.ACCEPTABLE,
+    desc = "submission won: accepted work drained")
+@Outcome(
+    expect = Expect.FORBIDDEN,
+    desc = "accepted work was lost or repeated, or engine did not terminate")
 @State
 public class EngineSubmitVersusShutdown {
 
