@@ -40,4 +40,10 @@ the same JVM fork. `-prof gc` adds bytes allocated per operation.
 
 ## Recorded runs
 
-None yet. Paste the output of `scripts/jmh_to_md.py` here together with its environment block.
+| Date | Commit | Environment | Workflow |
+|---|---|---|---|
+| 2026-11-01 | [`8dea60e`](https://github.com/codirex/clotho/commit/8dea60e2c5673f6de08fe04dad394a3d261c2265) | Temurin 21.0.13, JMH 1.37, Ubuntu 26.04, Xeon Platinum 8370C (4 shared vCPUs) | [Run #41264309099](https://github.com/codirex/clotho/actions/runs/41264309099) |
+
+This is a historical baseline, not a release-candidate measurement: it predates the November 2026
+engine lifecycle and direct-dispatch fixes. Re-run the full workflow on the release commit before
+making performance claims for a release.
