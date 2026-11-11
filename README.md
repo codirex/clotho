@@ -108,15 +108,16 @@ timer wheel and its own job state machine, and it specifies the behaviour in wri
 
 ```kotlin
 dependencies {
-    implementation("org.codirex.clotho:clotho:0.1.0-alpha01")           // JVM and Android core
-    implementation("org.codirex.clotho:clotho-android:0.1.0-alpha01")   // Android: main lane + lifecycle realms
-    testImplementation("org.codirex.clotho:clotho-test:0.1.0-alpha01")  // deterministic test tools
+    implementation(platform("org.codirex.clotho:clotho-bom:0.1.0-alpha02"))
+    implementation("org.codirex.clotho:clotho")           // JVM and Android core
+    implementation("org.codirex.clotho:clotho-android")   // Android: main lane + lifecycle realms
+    testImplementation("org.codirex.clotho:clotho-test")   // deterministic test tools
 }
 ```
 
-The next release, `0.1.0-alpha02`, will also publish `clotho-bom` to align these module versions. Until then, use the published coordinates above.
+Starting with `0.1.0-alpha02`, import `clotho-bom` to align all published module versions. The BOM and all three modules are released together.
 
-The current development version is `0.1.0-alpha01`. Artifacts are published to Maven Central under the
+The current development version is `0.1.0-alpha02`. Artifacts are published to Maven Central under the
 group `org.codirex.clotho` (see [CONTRIBUTING](docs/CONTRIBUTING.md) for the release process).
 
 **Requirements**
@@ -197,8 +198,7 @@ Realm custom = Realm.builder("name")
 | `failure()`, `isClosing()`, `isClosed()`, `outstanding()`, `name()`, `policy()`, `cadence()` | Inspection |
 
 **Membership is total.** Every job (including the result of `then`, `zip`, `race`, and the losers of a
-race) belongs to exactly one realm for its whole life. A realm is one atomic counter of outstanding
-jobs and callbacks plus a closing flag, so every operation is either accepted and will be waited
+race) belongs to exactly one realm for its whole life. A realm is one atomic counter of outstandingjobs and callbacks plus a closing flag, so every operation is either accepted and will be waited
 for, or throws `RealmClosedException`. Nothing is lost in between.
 
 ### Job and Outcome
@@ -397,8 +397,7 @@ Engine engine = Engine.builder()
 
 | `RejectionPolicy` | When the queue is full |
 |---|---|
-| `REJECT` | Throws `RejectedExecutionException`; the job ends as `Failure` |
-| `DROP_OLDEST` | The longest-waiting task is removed and never runs; its job ends as `Failure(DroppedException)`; the new task is queued |
+| `REJECT` | Throws `RejectedExecutionException`; the job ends as `Failure` || `DROP_OLDEST` | The longest-waiting task is removed and never runs; its job ends as `Failure(DroppedException)`; the new task is queued |
 | `CALLER_RUNS` | The submitting thread runs it, **only if that is safe** for blocking. Unknown callers (plain threads, UI thread) are rejected. The main thread is never used to run pool work |
 
 Serial and single lanes accept `REJECT` and `DROP_OLDEST`. `CALLER_RUNS` would break their ordering and
@@ -597,7 +596,6 @@ try (TestScheduler s = new TestScheduler()) {
 - `advance(d)` stops at every timer on the way, so each periodic run happens at its own time.
 - `jump(d)` moves time in one step like a device that slept (late timers fire once, fixed-rate jobs
   skip missed slots).
-
 Under the hood the core exposes `Engine.Builder.manualTimers()`, `Cadence.runDue()` and
 `Cadence.nextDueNanos()`: timers without a thread, driven by the engine clock. These exact tests already
 found one real bug (a fixed-rate slot run twice) during development.
@@ -648,24 +646,26 @@ for the first stable release).
 | Unit and behaviour tests | `clotho/src/test`, `clotho-test/src/test` | The documented contracts, with exact timing through a fake clock |
 | Real-thread tests | `Engine*Test`, `CadenceTest`, `PeriodicTest`, `MainLaneTest` | The same contracts with real threads (tolerant: "never early", ordering) |
 | Stress tests | `ConcurrencyStressTest`, `EngineStressTest`, `CadenceStressTest` | Exactly-once, no job without an outcome, no leaked thread, in the interleavings that occurred |
-| **jcstress** | `clotho-jcstress` (10 scenarios) | Which outcomes the JVM and CPU can produce for the small critical structures |
+| **jcstress** | `clotho-jcstress` (11 scenarios) | Which outcomes the JVM and CPU can produce for the small critical structures |
 | Robolectric | `clotho-android/src/test` | The Android glue on a simulated looper |
 | Instrumented | `clotho-android/src/androidTest` | The real looper, manifest merge and androidx lifecycle |
 
 jcstress scenarios: cancel vs completion, callback exactly once, `Cell` update and CAS, timer wheel
 fire vs cancel and schedule vs advance, realm launch vs close, race success vs cancel, ranked queue
-take-once, periodic cancel vs tick.
+take-once, periodic cancel vs tick, and pool submission vs engine shutdown.
 
 Build gates: Spotless (google-java-format + license header), animal-sniffer (API 24), `-Xlint:all -Werror`,
 strict Javadoc (`-Xdoclint:all`). JaCoCo produces a coverage report.
 
-**Honest limits.** Stress tests do not prove the absence of other interleavings. Coverage gates
-are not enforced yet. A historical benchmark baseline is recorded, but it predates the November
-engine lifecycle and direct-dispatch fixes; repeat it on the release commit. See
+**Honest limits.** Stress tests do not prove the absence of other interleavings. JaCoCo gates enforce
+90% line coverage and 80% branch coverage for JVM library modules. A historical benchmark baseline
+is recorded, but it predates the November engine lifecycle and direct-dispatch fixes; repeat it on
+the release commit. See
 [docs/TESTING.md](docs/TESTING.md) for what each kind of test proves and what is not covered.
 
-CI (GitHub Actions) runs the JVM modules on JDK 17 and 21, the Android module and a publishing dry run on
-every push and pull request. jcstress and benchmarks are manual workflows.
+CI (GitHub Actions) runs the JVM modules on JDK 17 and 21, the Android module, a publishing dry run,
+JCStress actor compilation and benchmark compilation on every push and pull request. Full JCStress
+and benchmark campaigns remain manual workflows.
 
 ---
 
@@ -746,7 +746,8 @@ Building the `app` sample needs Android SDK 37. Optional modules:
 queues), Android (main lane, lifecycle realms), timers (`Cadence`) and `Cell`, test tools
 (`clotho-test`), stress tests and jcstress scenarios, JMH benchmarks, CI and Maven Central publishing.
 
-**Still open before a stable release:** a current release-candidate benchmark run and coverage gates.
+**Still open before a stable release:** a current release-candidate benchmark run. Automatic
+binary-compatibility checking against the published baseline is planned for the first stable release.
 
 **Later:** `Flow` (value streams, after the first stable release); `clotho-ktx` (optional Kotlin
 extensions).
