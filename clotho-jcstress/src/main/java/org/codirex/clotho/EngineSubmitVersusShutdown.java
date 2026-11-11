@@ -49,6 +49,7 @@ public class EngineSubmitVersusShutdown {
       Engine.builder().computeThreads(1).manualTimers().build();
   private final AtomicInteger runs = new AtomicInteger();
 
+  /** Attempts to submit one task and records whether the pool accepted it. */
   @Actor
   public void submit(III_Result r) {
     try {
@@ -59,11 +60,13 @@ public class EngineSubmitVersusShutdown {
     }
   }
 
+  /** Starts graceful shutdown concurrently with the submission actor. */
   @Actor
   public void shutdown(III_Result r) {
     engine.shutdown();
   }
 
+  /** Waits for termination, then records the final execution count and termination result. */
   @Arbiter
   public void arbiter(III_Result r) {
     try {
