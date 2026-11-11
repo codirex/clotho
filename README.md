@@ -108,12 +108,13 @@ timer wheel and its own job state machine, and it specifies the behaviour in wri
 
 ```kotlin
 dependencies {
-    implementation(platform("org.codirex.clotho:clotho-bom:0.1.0-alpha02"))
-    implementation("org.codirex.clotho:clotho")           // JVM and Android core
-    implementation("org.codirex.clotho:clotho-android")   // Android: main lane + lifecycle realms
-    testImplementation("org.codirex.clotho:clotho-test")  // deterministic test tools
+    implementation("org.codirex.clotho:clotho:0.1.0-alpha01")           // JVM and Android core
+    implementation("org.codirex.clotho:clotho-android:0.1.0-alpha01")   // Android: main lane + lifecycle realms
+    testImplementation("org.codirex.clotho:clotho-test:0.1.0-alpha01")  // deterministic test tools
 }
 ```
+
+The next release, `0.1.0-alpha02`, will also publish `clotho-bom` to align these module versions. Until then, use the published coordinates above.
 
 The current development version is `0.1.0-alpha01`. Artifacts are published to Maven Central under the
 group `org.codirex.clotho` (see [CONTRIBUTING](docs/CONTRIBUTING.md) for the release process).
