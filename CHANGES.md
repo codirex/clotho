@@ -5,6 +5,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versioning follo
 
 ## [Unreleased]
 
+### Added
+- `clotho-bom`: a published Java Platform BOM constraining `clotho`, `clotho-android` and `clotho-test` to the same release version.
+
 ### Added (phase 7)
 - New module `clotho-bench` (JMH; opt-in with `-PwithBench`, not part of `build`): round trip
   (one and many producers, mean and percentiles), batch throughput, three-stage chain, ordered
