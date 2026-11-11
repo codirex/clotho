@@ -65,6 +65,23 @@ jobs:
       - name: Compile JMH benchmarks
         run: ./gradlew -PwithBench :clotho-bench:classes --stacktrace
 
+  # Compile JCStress actors on every PR without running the long memory-model campaign.
+  jcstress-compile:
+    name: JCStress compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v6
+      - run: chmod +x gradlew
+      - name: Compile JCStress tests
+        run: ./gradlew -PwithJcstress :clotho-jcstress:classes --stacktrace
+
   # Android module: Robolectric tests, lint, and the sample app. Needs the Android SDK.
   android:
     name: Android module
