@@ -38,13 +38,6 @@ mavenPublishing {
                 distribution.set("repo")
             }
         }
-        developers {
-            developer {
-                id.set(pom("POM_DEVELOPER_ID"))
-                name.set(pom("POM_DEVELOPER_NAME"))
-                url.set(pom("POM_DEVELOPER_URL"))
-            }
-        }
         scm {
             url.set(pom("POM_URL"))
             connection.set(pom("POM_SCM_CONNECTION"))

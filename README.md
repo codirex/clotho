@@ -108,11 +108,13 @@ timer wheel and its own job state machine, and it specifies the behaviour in wri
 
 ```kotlin
 dependencies {
-    implementation("org.codirex.clotho:clotho:<version>")           // JVM and Android core
-    implementation("org.codirex.clotho:clotho-android:<version>")   // Android: main lane + lifecycle realms
-    testImplementation("org.codirex.clotho:clotho-test:<version>")  // deterministic test tools
+    implementation("org.codirex.clotho:clotho:0.1.0-alpha01")           // JVM and Android core
+    implementation("org.codirex.clotho:clotho-android:0.1.0-alpha01")   // Android: main lane + lifecycle realms
+    testImplementation("org.codirex.clotho:clotho-test:0.1.0-alpha01")  // deterministic test tools
 }
 ```
+
+The next release, `0.1.0-alpha02`, will also publish `clotho-bom` to align these module versions. Until then, use the published coordinates above.
 
 The current development version is `0.1.0-alpha01`. Artifacts are published to Maven Central under the
 group `org.codirex.clotho` (see [CONTRIBUTING](docs/CONTRIBUTING.md) for the release process).
@@ -699,6 +701,7 @@ clotho-framework/
 ├── clotho/            Core (pure Java): Realm, Job, Lane, Engine, Cadence, Cell
 ├── clotho-android/    Android: main lane, startup initializer, lifecycle realms
 ├── clotho-test/       Test tools: TestClock, DeterministicLane, TestScheduler, ...
+├── clotho-bom/        Published platform constraining all Clotho module versions
 ├── clotho-jcstress/   10 jcstress scenarios      (opt-in: -PwithJcstress)
 ├── clotho-bench/      JMH benchmarks             (opt-in: -PwithBench)
 ├── app/               Sample Android app
@@ -742,7 +745,7 @@ Building the `app` sample needs Android SDK 37. Optional modules:
 queues), Android (main lane, lifecycle realms), timers (`Cadence`) and `Cell`, test tools
 (`clotho-test`), stress tests and jcstress scenarios, JMH benchmarks, CI and Maven Central publishing.
 
-**Still open before a stable release:** a recorded benchmark run, coverage gates, a BOM.
+**Still open before a stable release:** a current release-candidate benchmark run and coverage gates.
 
 **Later:** `Flow` (value streams, after the first stable release); `clotho-ktx` (optional Kotlin
 extensions).

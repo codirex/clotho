@@ -21,6 +21,7 @@ include(":app")
 include(":clotho")
 include(":clotho-android")
 include(":clotho-test")
+include(":clotho-bom")
 
 if (providers.gradleProperty("withJcstress").isPresent) {
     include(":clotho-jcstress")

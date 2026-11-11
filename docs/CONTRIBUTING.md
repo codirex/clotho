@@ -25,7 +25,7 @@ Per release:
    version, and merge to `main` with CI green.
 2. Tag and push: `git tag v<version> && git push origin v<version>`. The `Release` workflow checks
    that the tag (without the `v`) equals `VERSION_NAME`, builds and tests `clotho`, `clotho-test`
-   and `clotho-android`, signs and uploads them to Maven Central, then creates the GitHub release
+   and `clotho-android`, builds `clotho-bom`, signs and uploads all four artifacts to Maven Central, then creates the GitHub release
    (marked as a pre-release when the version contains a `-`).
 3. Unless `MAVEN_CENTRAL_AUTO_RELEASE` is true, press **Publish** in the Central Portal.
 
