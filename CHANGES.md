@@ -21,6 +21,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versioning follo
 - Correct JMH allocation reporting to read `gc.alloc.rate.norm` and align scheduled-executor timer parameters for comparable results.
 - Compile JMH benchmarks and JCStress actors in pull-request CI without running their long campaigns.
 
+## [0.1.0-alpha01] - 2026-11-01
+
 ### Added (phase 7)
 - New module `clotho-bench` (JMH; opt-in with `-PwithBench`, not part of `build`): round trip
   (one and many producers, mean and percentiles), batch throughput, three-stage chain, ordered
@@ -55,8 +57,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versioning follo
 ### Added (phase 5)
 - Timers: `Realm.after`, `Realm.every`, `Realm.atRate` (+ `Priority`/`RepeatFailure` overloads),
   `Realm.Builder.cadence(...)`, `Realm.cadence()`, `Action`, `RepeatFailure`.
-- `Cadence` (one hashed timer wheel and one thread per engine): `Engine.cadence()`, `Engine.Builder.timerTick(...)`,
-  `timerWheelSize(...)`.
+- `Cadence` (one hashed timer wheel and one thread per engine): `Engine.cadence()`,
+  `Engine.Builder.timerTick(...)`, `timerWheelSize(...)`.
 - `Cell<T>`: `get`, `set`, `getAndSet`, `compareAndSet`, `compareAndSetSame`, `update`,
   `updateAndGet`, `getAndUpdate`.
 - `LaneClosedException`; `DroppedException.Reason` (`QUEUE_OVERFLOW`, `SHUTDOWN`) and `reason()`.
