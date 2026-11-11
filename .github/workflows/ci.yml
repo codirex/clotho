@@ -48,6 +48,23 @@ jobs:
             **/build/reports/tests
             **/build/test-results
 
+  # Compile JMH benchmarks on every PR without running the long performance suite.
+  bench-compile:
+    name: Benchmarks compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v6
+      - run: chmod +x gradlew
+      - name: Compile JMH benchmarks
+        run: ./gradlew -PwithBench :clotho-bench:classes --stacktrace
+
   # Compile JCStress actors on every PR without running the long memory-model campaign.
   jcstress-compile:
     name: JCStress compile
@@ -95,6 +112,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -106,3 +125,29 @@ jobs:
         run: ./gradlew publishToMavenLocal --stacktrace
       - name: List what would be released
         run: find ~/.m2/repository/org/codirex/clotho -name '*.pom' -o -name '*.jar' -o -name '*.aar' | sort
+      - name: Verify published POM developer metadata
+        shell: bash
+        run: |
+          version="$(sed -n 's/^VERSION_NAME=//p' gradle.properties)"
+          for artifact in clotho clotho-test clotho-android clotho-bom; do
+            pom="$HOME/.m2/repository/org/codirex/clotho/$artifact/$version/$artifact-$version.pom"
+            test -f "$pom"
+            count="$(grep -c '<developer>' "$pom" || true)"
+            if [ "$count" -ne 1 ]; then
+              echo "$artifact POM contains $count developer entries; expected exactly one."
+              exit 1
+            fi
+          done
+          python - "$HOME/.m2/repository/org/codirex/clotho/clotho-bom/$version/clotho-bom-$version.pom" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          ns = {"m": "http://maven.apache.org/POM/4.0.0"}
+          root = ET.parse(sys.argv[1]).getroot()
+          android = root.find(
+              "./m:dependencyManagement/m:dependencies/m:dependency[m:artifactId='clotho-android']",
+              ns,
+          )
+          if android is None or android.findtext("m:type", namespaces=ns) != "aar":
+              raise SystemExit("BOM must publish clotho-android with Maven type aar")
+          PY
