@@ -360,6 +360,7 @@ final class PoolLane implements Lane, ManagedLane {
               && keepAliveNanos - (System.nanoTime() - idleStart) <= 0
               && queued.get() == 0
               && !stopNow) {
+            engine.beforeWorkerRetirement();
             return;
           }
         }
