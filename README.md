@@ -660,8 +660,9 @@ Build gates: Spotless (google-java-format + license header), animal-sniffer (API
 strict Javadoc (`-Xdoclint:all`). JaCoCo produces a coverage report.
 
 **Honest limits.** Stress tests do not prove the absence of other interleavings. Coverage gates
-and a recorded benchmark run are still open. See [docs/TESTING.md](docs/TESTING.md) for what each
-kind of test proves and what is not covered.
+are not enforced yet. A historical benchmark baseline is recorded, but it predates the November
+engine lifecycle and direct-dispatch fixes; repeat it on the release commit. See
+[docs/TESTING.md](docs/TESTING.md) for what each kind of test proves and what is not covered.
 
 CI (GitHub Actions) runs the JVM modules on JDK 17 and 21, the Android module and a publishing dry run on
 every push and pull request. jcstress and benchmarks are manual workflows.
@@ -688,9 +689,9 @@ every push and pull request. jcstress and benchmarks are manual workflows.
 python3 scripts/jmh_to_md.py clotho-bench/build/results/jmh/results.json > report.md
 ```
 
-**No numbers are published yet.** Recorded results will be added to
-[docs/BENCHMARKS.md](docs/BENCHMARKS.md) from a quiet machine with the hardware stated. Benchmarks
-Clotho loses stay in the report.
+A historical baseline is recorded in [docs/BENCHMARKS.md](docs/BENCHMARKS.md). It predates the
+November engine lifecycle and direct-dispatch fixes, so run the full workflow on the release commit
+before making performance claims. Benchmarks Clotho loses stay in the report.
 
 ---
 

@@ -27,6 +27,7 @@ import org.openjdk.jmh.annotations.Level;
 import org.openjdk.jmh.annotations.Mode;
 import org.openjdk.jmh.annotations.OperationsPerInvocation;
 import org.openjdk.jmh.annotations.OutputTimeUnit;
+import org.openjdk.jmh.annotations.Param;
 import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
@@ -50,13 +51,19 @@ public class Timers {
   /** The two scheduled executors. */
   @State(Scope.Benchmark)
   public static class Schedulers {
+    /** Match the Clotho pool size parameter so all timer implementations share one result table. */
+    @Param("0")
+    public int poolThreads;
+
     public ScheduledThreadPoolExecutor keepCancelled;
     public ScheduledThreadPoolExecutor removeCancelled;
 
+    /** Creates matching scheduled executors for the current benchmark pool-size parameter. */
     @Setup
     public void setUp() {
-      keepCancelled = new ScheduledThreadPoolExecutor(1);
-      removeCancelled = new ScheduledThreadPoolExecutor(1);
+      int n = poolThreads > 0 ? poolThreads : Runtime.getRuntime().availableProcessors();
+      keepCancelled = new ScheduledThreadPoolExecutor(n);
+      removeCancelled = new ScheduledThreadPoolExecutor(n);
       removeCancelled.setRemoveOnCancelPolicy(true);
     }
 
