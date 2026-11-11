@@ -325,6 +325,11 @@ final class PoolLane implements Lane, ManagedLane {
       }
     }
 
+    /**
+     * Runs tasks until shutdown or until this worker reaches its idle keep-alive limit.
+     *
+     * <p>An unclaimed worker retires only after rechecking the queue and shutdown state.
+     */
     private void loop() {
       boolean idleTiming = false;
       long idleStart = 0;
@@ -360,6 +365,7 @@ final class PoolLane implements Lane, ManagedLane {
               && keepAliveNanos - (System.nanoTime() - idleStart) <= 0
               && queued.get() == 0
               && !stopNow) {
+            engine.beforeWorkerRetirement();
             return;
           }
         }

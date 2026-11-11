@@ -49,9 +49,10 @@ also discard its pending timers and end its thread.
 - **`isTerminated()` is final.** It can become `true` only after `shutdown()` has finished waiting for
   the submissions in progress (including a timer thread that was being started), so no accepted
   submission and no thread start is still pending. A rejected submission never changes it.
-  (Tests: `EngineShutdownRaceTest`, and `EnginePoolHandoffTest` for the handover of a worker that
-  ends because its loop fails. The narrow race of a retiring worker against a submission has no test
-  seam and is not reproduced.)
+  (Tests: `EngineShutdownRaceTest`, `EnginePoolHandoffTest` for a worker that ends because its
+  loop fails, and `EngineWorkerRetirementRaceTest` for a submission accepted after the last worker
+  commits to keep-alive retirement but before its thread count is decremented. The test-only
+  retirement hook pauses at that exact boundary.)
 - **After shutdown every lane rejects**: `Lane.execute` throws `RejectedExecutionException`; a job
   launched on it ends as `Failure(RejectedExecutionException)`. Creating serial/single lanes throws
   `IllegalStateException`. The lane objects stay valid, they just reject.
