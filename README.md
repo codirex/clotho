@@ -703,7 +703,7 @@ clotho-framework/
 ├── clotho-android/    Android: main lane, startup initializer, lifecycle realms
 ├── clotho-test/       Test tools: TestClock, DeterministicLane, TestScheduler, ...
 ├── clotho-bom/        Published platform constraining all Clotho module versions
-├── clotho-jcstress/   10 jcstress scenarios      (opt-in: -PwithJcstress)
+├── clotho-jcstress/   11 jcstress scenarios      (opt-in: -PwithJcstress)
 ├── clotho-bench/      JMH benchmarks             (opt-in: -PwithBench)
 ├── app/               Sample Android app
 ├── build-logic/       Gradle convention plugins (library, publish, spotless, java-base)
