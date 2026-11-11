@@ -27,8 +27,8 @@ import org.openjdk.jcstress.infra.results.III_Result;
 
 /**
  * A pool submission racing graceful engine shutdown. r1 = whether submission was accepted, r2 =
- * how many times the task ran, r3 = whether the engine terminated. An accepted task must run once;
- * a rejected task must never run.
+ * how many times the task ran after termination, r3 = whether the engine terminated. An accepted
+ * task must run once; a rejected task must never run.
  */
 @JCStressTest
 @Outcome(
