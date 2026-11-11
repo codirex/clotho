@@ -40,7 +40,22 @@ publishing {
                     .filterIsInstance<groovy.util.Node>()
                     .none { it.name() == "type" }
             ) {
-                androidConstraint.appendNode("type", "aar")
+                val typeNode = androidConstraint.appendNode("type", "aar")
+                @Suppress("UNCHECKED_CAST")
+                val childNodes = androidConstraint.children() as MutableList<Any>
+                childNodes.remove(typeNode)
+                val insertionIndex =
+                    childNodes.indexOfFirst { child ->
+                        child is groovy.util.Node &&
+                            (child.name() == "classifier" ||
+                                child.name() == "scope" ||
+                                child.name() == "optional")
+                    }
+                if (insertionIndex >= 0) {
+                    childNodes.add(insertionIndex, typeNode)
+                } else {
+                    childNodes.add(typeNode)
+                }
             }
         }
     }
