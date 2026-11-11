@@ -96,7 +96,7 @@ running.
 
 ## 4. Not covered
 
-- Coverage gates: JaCoCo reports are produced, but no minimum is enforced yet.
+- Coverage gates: CI enforces at least 90% line coverage and 80% branch coverage in each JVM library module. These floors do not prove the absence of concurrency races.
 - Custom lint rules and mutation testing: none.
 - jcstress for the whole engine (`PoolLane`, `SerialLane`): too coarse for jcstress; covered by the
   stress tests only.
