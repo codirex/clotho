@@ -5,8 +5,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versioning follo
 
 ## [Unreleased]
 
+## [0.1.0-alpha02] - 2026-11-11
+
 ### Added
 - `clotho-bom`: a published Java Platform BOM constraining `clotho`, `clotho-android` and `clotho-test` to the same release version.
+- JCStress coverage for pool submission racing graceful `Engine.shutdown()`; CI compiles the JCStress actors on every pull request.
+
+### Fixed
+- `Lane.direct()` continuation dispatch now drains queued callbacks iteratively, preventing stack overflow in deeply chained continuations while preserving synchronous dispatch semantics.
+- Preserve each queued continuation's captured `LaneContext`, including `BlockingPolicy.FORBIDDEN`; `Job.await()` remains a non-dispatching wait.
+- Make graceful engine shutdown wait for submissions already in flight, including timer-thread startup, before reporting termination.
+- Add deterministic regression coverage for the last-worker retirement/submission race, verifying that an accepted task is handed to a replacement worker exactly once and prevents premature termination.
+- Avoid self-suppression when an `UncaughtHandler` rethrows the same failure it was asked to report.
+
+### Build
+- Enforce JaCoCo minimums for JVM library modules: 90% line coverage and 80% branch coverage.
+- Correct JMH allocation reporting to read `gc.alloc.rate.norm` and align scheduled-executor timer parameters for comparable results.
+- Compile JMH benchmarks and JCStress actors in pull-request CI without running their long campaigns.
+
+## [0.1.0-alpha01] - 2026-11-01
 
 ### Added (phase 7)
 - New module `clotho-bench` (JMH; opt-in with `-PwithBench`, not part of `build`): round trip
