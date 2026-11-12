@@ -2,8 +2,10 @@
 
 ## Decision
 
-Use **JApiCmp through the Gradle plugin** as the first binary-compatibility gate, with the
-published `0.1.0-alpha02` artifacts as the immutable baseline.
+Use **JApiCmp through `me.champeau.gradle.japicmp` 0.4.6** as the first binary-compatibility gate,
+with the published `0.1.0-alpha02` artifacts as the immutable baseline. Version 0.4.6 is the
+latest version listed in the Gradle Plugin Portal at the time of this review; compatibility with
+this repository's Gradle 9.8.2 wrapper remains a validation requirement.
 
 Candidate evaluated:
 
