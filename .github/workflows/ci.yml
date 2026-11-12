@@ -33,6 +33,8 @@ jobs:
         run: ./gradlew :clotho:build :clotho-test:build --stacktrace
       - name: Validate JApiCmp integration against the published core baseline
         run: ./gradlew :clotho:validateBinaryCompatibilityTool --stacktrace
+      - name: Verify JApiCmp detects a deliberate binary break
+        run: ./gradlew :clotho:verifyBinaryCompatibilityToolDetectsBreakingChange --stacktrace
       - name: Upload binary compatibility validation reports
         if: always()
         uses: actions/upload-artifact@v7
