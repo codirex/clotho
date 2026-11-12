@@ -17,6 +17,10 @@ val binaryCompatibilityBaselineArtifact =
         isCanBeConsumed = false
         isCanBeResolved = true
         isTransitive = false
+
+        // This module is also produced by this build. Disable composite-build substitution so
+        // Gradle downloads the published baseline instead of silently substituting :clotho.
+        resolutionStrategy.useGlobalDependencySubstitutionRules.set(false)
     }
 
 dependencies {
