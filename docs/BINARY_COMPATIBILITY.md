@@ -56,14 +56,19 @@ Compare the published class archives for all three code-bearing published artifa
 The BOM is excluded because it has no classes. The Android module's dependency on core does not
 replace the separate core comparison: each artifact's own classes are checked once.
 
-Use the public access level for the published API. Supply the relevant old/new dependency
-classpaths for symbol resolution rather than globally suppressing missing-class diagnostics.
-In particular, Android's public references to AndroidX types must be resolvable during comparison.
+Use the `protected` access level for the published API. This includes both public and protected
+members, so removing a protected member used by a compiled external subclass is detected. Supply
+the relevant old/new dependency classpaths for symbol resolution rather than globally suppressing
+missing-class diagnostics. In particular, Android's public references to AndroidX types must be
+resolvable during comparison.
 
 ## Gate behavior
 
 - Fail only on binary-incompatible changes. Adding a new public class or method is not, by itself,
   a binary break and must not fail this gate.
+- Track synthetic classes and members, including compiler-generated bridge methods. Configure each
+  JApiCmp task with `includeSynthetic = true`; synthetic members are hidden by default and can still
+  be part of the binary contract used by already-compiled consumers.
 - Produce a machine-readable report (XML) and a human-readable report (Markdown or HTML) per
   artifact under `build/reports/binary-compatibility/`.
 - Expose one root task, `checkBinaryCompatibility`, and make the published modules' `check`
@@ -77,11 +82,18 @@ In particular, Android's public references to AndroidX types must be resolvable 
 
 A baseline update is a release-management action, not a routine cleanup:
 
-1. Publish and validate the new release first.
-2. Change the single baseline version property to that exact published version.
-3. Include the generated compatibility reports in the PR evidence.
-4. Explain every accepted binary break in the PR and release notes, including the migration path.
-5. Require explicit review before merge. Do not auto-accept all changes or rewrite the old baseline.
+1. Include the generated compatibility reports in the release PR evidence while comparing against
+   the existing published baseline.
+2. Explain every proposed binary break in the PR and release notes, including its impact and the
+   migration path. Do not describe an unexplained break as accepted.
+3. Require explicit review and approval of every accepted binary break before the release PR is
+   merged or the release is published. Keep the old baseline in force throughout this review.
+4. Publish and validate the new release only after that approval.
+5. In a follow-up baseline-update change, set the single baseline version property to that exact
+   published version. Keep the generated reports and release reference as review evidence.
+
+Do not auto-accept all changes or rewrite the old baseline before the replacement artifacts have
+been published and validated.
 
 ## Validation still required before enabling the gate
 
