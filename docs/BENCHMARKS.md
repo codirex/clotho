@@ -64,7 +64,7 @@ latency is in us/op (lower is better). Allocation is normalized bytes per operat
 | RealmScope | 15.8 us/op | plain pool: 15.4 us/op | Within the reported confidence interval; effectively no measured latency difference |
 | RoundTripManyProducers | 7.948 us/op | ForkJoinPool: 5.970 us/op | Clotho is slower than ForkJoinPool, but faster than ThreadPoolExecutor and CompletableFuture |
 | RoundTripSingleProducer | 16.1 us/op | CompletableFuture: 15.1 us/op | Close to the alternatives; no claim of a win |
-| Timers | 5,962 ops/ms | ScheduledThreadPoolExecutor (keep cancelled): 14,505 ops/ms | Clotho trails both scheduled-executor configurations in this workload |
+| Timers | 5,962 ops/ms | ScheduledThreadPoolExecutor (keep cancelled): 14,505 ops/ms | Clotho is clearly below keep-cancelled; it overlaps the remove-on-cancel result (6,293 ± 445 ops/ms) |
 
 Allocation is a visible cost in this run: Clotho ranges from about 320 B/op for
 `OrderedLane` to 2,032 B/op for sampled `Chain`. The round-trip measurements are about
