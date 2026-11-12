@@ -1,0 +1,127 @@
+# Binary compatibility
+
+## Decision
+
+Use **JApiCmp through `me.champeau.gradle.japicmp` 0.4.6** as the first binary-compatibility gate,
+with the published `0.1.0-alpha02` artifacts as the immutable baseline. Version 0.4.6 is the
+latest version listed in the Gradle Plugin Portal at the time of this review; compatibility with
+this repository's Gradle 9.8.2 wrapper remains a validation requirement.
+
+Candidate evaluated:
+
+| Tool | Strengths | Fit for Clotho |
+|---|---|---|
+| JApiCmp (`me.champeau.gradle.japicmp`) | Compares compiled archives; can report only binary-incompatible modifications; accepts explicit old/new archive and classpath inputs | Best fit for a narrowly defined JVM/Android ABI gate. The Android AAR can be normalized to its `classes.jar` before comparison. |
+| Revapi | Broader API analysis, including source and semantic compatibility, extensible checks, and API-surface/dependency analysis | Valuable if Clotho later wants source/semantic API policy. Its Gradle integrations are primarily documented for Java projects; Android Gradle Plugin/AAR handling would still need separate integration. |
+
+JApiCmp's Gradle plugin documents explicit `oldArchives`/`newArchives` and classpath inputs,
+binary-incompatible-only reporting, and failure/report configuration:
+https://github.com/melix/japicmp-gradle-plugin
+
+Revapi's Java checker distinguishes source, binary, and semantic compatibility and supports
+dependency/API-surface analysis:
+https://github.com/revapi/revapi
+
+The decision is deliberately scoped: this phase establishes **binary compatibility**, not a
+complete source-compatibility or semantic-compatibility policy. Revisit Revapi if that broader
+policy becomes a release requirement.
+
+## Baseline
+
+Pin the baseline to the published release, not to a moving branch or the current source tree:
+
+- Version: `0.1.0-alpha02`
+- Maven group: `org.codirex.clotho`
+- Core artifact: `org.codirex.clotho:clotho:0.1.0-alpha02`
+- Android artifact: `org.codirex.clotho:clotho-android:0.1.0-alpha02`
+- Test artifact: `org.codirex.clotho:clotho-test:0.1.0-alpha02`
+- BOM: `org.codirex.clotho:clotho-bom:0.1.0-alpha02` (metadata/platform only; no class archive to compare)
+- Release tag: `v0.1.0-alpha02`
+- Release commit: `545602a04155686e4de610a2365675401a4c3b0a`
+
+The baseline version must be a single Gradle property (for example,
+`binaryCompatibilityBaseline`) so intentional baseline updates are reviewable and do not require
+editing task logic.
+
+## Comparison scope
+
+Compare the published class archives for all three code-bearing published artifacts:
+
+1. `clotho`: compare the published baseline JAR with the current `jar` output.
+2. `clotho-test`: compare its published baseline JAR with the current `jar` output.
+3. `clotho-android`: resolve the published baseline AAR, extract its `classes.jar`, and compare
+   it with `classes.jar` extracted from the current release AAR. Do not compare the AAR ZIP
+   container itself.
+
+The BOM is excluded because it has no classes. The Android module's dependency on core does not
+replace the separate core comparison: each artifact's own classes are checked once.
+
+Use the `protected` access level for the published API. This includes both public and protected
+members, so removing a protected member used by a compiled external subclass is detected. Supply
+the relevant old/new dependency classpaths for symbol resolution rather than globally suppressing
+missing-class diagnostics. In particular, Android's public references to AndroidX types must be
+resolvable during comparison.
+
+## Gate behavior
+
+- Fail only on binary-incompatible changes. Adding a new public class or method is not, by itself,
+  a binary break and must not fail this gate.
+- Track synthetic classes and members, including compiler-generated bridge methods. Configure each
+  JApiCmp task with `includeSynthetic = true`; synthetic members are hidden by default and can still
+  be part of the binary contract used by already-compiled consumers.
+- Produce a machine-readable report (XML) and a human-readable report (Markdown or HTML) per
+  artifact under `build/reports/binary-compatibility/`.
+- Expose one root task, `checkBinaryCompatibility`, and make the published modules' `check`
+  tasks depend on their respective comparison tasks so the existing `./gradlew build`/CI path
+  enforces the gate.
+- A missing or unresolvable baseline is a hard failure. Never silently skip a module.
+- Do not blanket-ignore missing classes. Resolve the published API's dependencies; any narrowly
+  justified exclusions must be documented with the affected symbol and reason.
+
+## Updating the baseline
+
+A baseline update is a release-management action, not a routine cleanup:
+
+1. Include the generated compatibility reports in the release PR evidence while comparing against
+   the existing published baseline.
+2. Explain every proposed binary break in the PR and release notes, including its impact and the
+   migration path. Do not describe an unexplained break as accepted.
+3. Require explicit review and approval of every accepted binary break before the release PR is
+   merged or the release is published. Keep the old baseline in force throughout this review.
+4. Publish and validate the new release only after that approval.
+5. In a follow-up baseline-update change, set the single baseline version property to that exact
+   published version. Keep the generated reports and release reference as review evidence.
+
+Do not auto-accept all changes or rewrite the old baseline before the replacement artifacts have
+been published and validated.
+
+### Approved-break exceptions
+
+An intentionally accepted break must not be handled by disabling the comparison, replacing the
+baseline early, or broadly suppressing a class/package. The implementation must provide a
+version-controlled exception manifest with one entry per approved incompatibility. Each entry must
+identify the exact artifact, fully qualified class and member (including descriptor where relevant),
+the incompatibility kind, the approving PR/release reference, a concise rationale, and the target
+release. Wildcards and package-wide entries are forbidden.
+
+The gate must always run the complete comparison against the unchanged published baseline and
+retain the unfiltered XML and human-readable reports. It may pass with detected incompatibilities
+only when every reported break matches exactly one approved manifest entry. Any unmatched break,
+ambiguous match, expired/wrong-release entry, or manifest entry that no longer matches a reported
+break must fail the gate. This makes exceptions explicit and temporary rather than silently hiding
+new or changed breaks. Exception entries require reviewer approval in the release PR and are
+removed or revised after the approved release is established as the new baseline.
+
+The manifest is an implementation requirement for the gate; do not enable CI enforcement until
+matching, stale-entry detection, and report retention are covered by automated tests.
+
+## Validation still required before enabling the gate
+
+- Verify the selected JApiCmp plugin version works with this repository's Gradle wrapper and
+  configuration-cache/build conventions.
+- Prove that Maven Central resolves all three `0.1.0-alpha02` artifacts in CI.
+- Verify the Android AAR extraction path against both the published AAR and the current AGP
+  release AAR.
+- Run the comparison against the current `main` artifacts and manually inspect the initial report.
+  The first run is expected to establish the baseline, not to hide unexplained incompatibilities.
+- Only after those checks pass should the task be wired into the required CI `check` path.
