@@ -95,6 +95,26 @@ A baseline update is a release-management action, not a routine cleanup:
 Do not auto-accept all changes or rewrite the old baseline before the replacement artifacts have
 been published and validated.
 
+### Approved-break exceptions
+
+An intentionally accepted break must not be handled by disabling the comparison, replacing the
+baseline early, or broadly suppressing a class/package. The implementation must provide a
+version-controlled exception manifest with one entry per approved incompatibility. Each entry must
+identify the exact artifact, fully qualified class and member (including descriptor where relevant),
+the incompatibility kind, the approving PR/release reference, a concise rationale, and the target
+release. Wildcards and package-wide entries are forbidden.
+
+The gate must always run the complete comparison against the unchanged published baseline and
+retain the unfiltered XML and human-readable reports. It may pass with detected incompatibilities
+only when every reported break matches exactly one approved manifest entry. Any unmatched break,
+ambiguous match, expired/wrong-release entry, or manifest entry that no longer matches a reported
+break must fail the gate. This makes exceptions explicit and temporary rather than silently hiding
+new or changed breaks. Exception entries require reviewer approval in the release PR and are
+removed or revised after the approved release is established as the new baseline.
+
+The manifest is an implementation requirement for the gate; do not enable CI enforcement until
+matching, stale-entry detection, and report retention are covered by automated tests.
+
 ## Validation still required before enabling the gate
 
 - Verify the selected JApiCmp plugin version works with this repository's Gradle wrapper and
