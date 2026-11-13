@@ -92,6 +92,9 @@ val binaryCompatibilityOldFixtureCompile =
         classpath = files()
         destinationDirectory.set(layout.buildDirectory.dir("classes/japicmp-validation/old"))
         options.release.set(8)
+        // The shared Java convention enables -Werror and source/target 8. JDK 21 warns that
+        // those legacy flags are obsolete; suppress only that options warning for these fixtures.
+        options.compilerArgs.add("-Xlint:-options")
     }
 
 val binaryCompatibilityNewFixtureCompile =
@@ -100,6 +103,7 @@ val binaryCompatibilityNewFixtureCompile =
         classpath = files()
         destinationDirectory.set(layout.buildDirectory.dir("classes/japicmp-validation/new"))
         options.release.set(8)
+        options.compilerArgs.add("-Xlint:-options")
     }
 
 val binaryCompatibilityOldFixtureJar =
