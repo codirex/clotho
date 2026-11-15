@@ -121,7 +121,7 @@ fun Project.registerBinaryCompatibilityValidation(
         onlyBinaryIncompatibleModified.set(true)
         failOnModification.set(false)
 
-        xmlOutputFile.set(reportDirectory.map { it.file("$reportName.xml").asFile })
-        mdOutputFile.set(reportDirectory.map { it.file("$reportName.md").asFile })
+        xmlOutputFile.set(reportDirectory.map { it.file("$reportName.xml") })
+        mdOutputFile.set(reportDirectory.map { it.file("$reportName.md") })
     }
 }
