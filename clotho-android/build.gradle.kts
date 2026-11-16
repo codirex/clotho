@@ -79,11 +79,14 @@ val extractCurrentClasses =
 
 // The classes.jar of every release compile-classpath dependency selected by [include]. JApiCmp needs
 // them (the androidx types in the public API, compileOnly lifecycle) to resolve supertypes and
-// signatures, so missing classes are resolved rather than ignored.
+// signatures, so missing classes are resolved rather than ignored. AGP creates the variant
+// configurations after this script is evaluated, so the lookup is deferred until the files are used.
 fun releaseCompileClasses(include: (ComponentIdentifier) -> Boolean): FileCollection =
     files(
-        configurations.named("releaseCompileClasspath").map { configuration ->
-            configuration.incoming
+        provider {
+            configurations
+                .getByName("releaseCompileClasspath")
+                .incoming
                 .artifactView {
                     attributes.attribute(
                         ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE,
