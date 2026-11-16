@@ -31,6 +31,21 @@ jobs:
       - run: chmod +x gradlew
       - name: Build and test
         run: ./gradlew :clotho:build :clotho-test:build --stacktrace
+      - name: Validate JApiCmp integration against the published core baseline
+        run: ./gradlew :clotho:validateBinaryCompatibilityTool --stacktrace
+      - name: Validate JApiCmp integration against the published test baseline
+        run: ./gradlew :clotho-test:validateBinaryCompatibilityTool --stacktrace
+      - name: Verify JApiCmp detects a deliberate binary break
+        run: ./gradlew :clotho:verifyBinaryCompatibilityToolDetectsBreakingChange --stacktrace
+      - name: Upload binary compatibility validation reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: binary-compatibility-validation-jdk${{ matrix.java }}
+          path: |
+            clotho/build/reports/binary-compatibility/validation
+            clotho-test/build/reports/binary-compatibility/validation
+          if-no-files-found: warn
       - name: Coverage report
         if: matrix.java == 17
         uses: actions/upload-artifact@v7
@@ -97,6 +112,15 @@ jobs:
       - run: chmod +x gradlew
       - name: Test, lint, assemble
         run: ./gradlew :clotho-android:testDebugUnitTest :clotho-android:lintDebug :clotho-android:spotlessCheck :app:assembleDebug --stacktrace
+      - name: Validate JApiCmp integration against the published Android baseline
+        run: ./gradlew :clotho-android:validateBinaryCompatibilityTool --stacktrace
+      - name: Upload binary compatibility validation report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: binary-compatibility-validation-android
+          path: clotho-android/build/reports/binary-compatibility/validation
+          if-no-files-found: warn
       - name: Reports
         if: failure()
         uses: actions/upload-artifact@v7

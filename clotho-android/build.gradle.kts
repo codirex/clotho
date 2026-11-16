@@ -1,7 +1,15 @@
+import org.codirex.clotho.build.publishedBaseline
+import org.codirex.clotho.build.registerBinaryCompatibilityValidation
+import org.gradle.api.artifacts.component.ComponentIdentifier
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import org.gradle.api.artifacts.component.ProjectComponentIdentifier
+import org.gradle.api.artifacts.type.ArtifactTypeDefinition
+
 plugins {
     id("com.android.library")
     id("clotho.spotless")
     id("clotho.publish")
+    id("clotho.binary-compatibility")
 }
 
 android {
@@ -48,3 +56,72 @@ dependencies {
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.lifecycle.runtime)
 }
+
+// Binary compatibility validation (non-enforcing, see :clotho). The published AAR and the current
+// release AAR are compared through the classes.jar each one contains.
+val androidBaseline = publishedBaseline("clotho-android", extension = "aar")
+val coreBaseline = publishedBaseline("clotho")
+
+val extractBaselineClasses =
+    tasks.register<Sync>("extractBinaryCompatibilityBaselineClasses") {
+        from(provider { zipTree(androidBaseline.file) }) { include("classes.jar") }
+        into(layout.buildDirectory.dir("binary-compatibility/baseline-aar"))
+    }
+
+val extractCurrentClasses =
+    tasks.register<Sync>("extractBinaryCompatibilityCurrentClasses") {
+        dependsOn("bundleReleaseAar")
+        from(tasks.named<Zip>("bundleReleaseAar").flatMap { it.archiveFile }.map { zipTree(it) }) {
+            include("classes.jar")
+        }
+        into(layout.buildDirectory.dir("binary-compatibility/current-aar"))
+    }
+
+// The classes.jar of every release compile-classpath dependency selected by [include]. JApiCmp needs
+// them (the androidx types in the public API, compileOnly lifecycle) to resolve supertypes and
+// signatures, so missing classes are resolved rather than ignored. AGP creates the variant
+// configurations after this script is evaluated, so the lookup is deferred until the files are used.
+fun releaseCompileClasses(include: (ComponentIdentifier) -> Boolean): FileCollection =
+    files(
+        provider {
+            configurations
+                .getByName("releaseCompileClasspath")
+                .incoming
+                .artifactView {
+                    attributes.attribute(
+                        ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE,
+                        "android-classes-jar",
+                    )
+                    componentFilter { include(it) }
+                }
+                .files
+        },
+    )
+
+val androidBootClasspath: FileCollection =
+    files(androidComponents.sdkComponents.bootClasspath.map { jars -> jars.map { it.asFile } })
+
+registerBinaryCompatibilityValidation(
+    reportName = "clotho-android",
+    taskDescription =
+        "Validates JApiCmp against the published Clotho Android AAR without enforcing compatibility.",
+    baselines = listOf(androidBaseline, coreBaseline),
+    oldArchives =
+        files(layout.buildDirectory.file("binary-compatibility/baseline-aar/classes.jar"))
+            .builtBy(extractBaselineClasses),
+    newArchives =
+        files(layout.buildDirectory.file("binary-compatibility/current-aar/classes.jar"))
+            .builtBy(extractCurrentClasses),
+    oldClasspath =
+        files(
+            coreBaseline.files,
+            releaseCompileClasses { it is ModuleComponentIdentifier },
+            androidBootClasspath,
+        ),
+    newClasspath =
+        files(
+            releaseCompileClasses { it is ProjectComponentIdentifier },
+            releaseCompileClasses { it is ModuleComponentIdentifier },
+            androidBootClasspath,
+        ),
+)
