@@ -112,6 +112,15 @@ jobs:
       - run: chmod +x gradlew
       - name: Test, lint, assemble
         run: ./gradlew :clotho-android:testDebugUnitTest :clotho-android:lintDebug :clotho-android:spotlessCheck :app:assembleDebug --stacktrace
+      - name: Validate JApiCmp integration against the published Android baseline
+        run: ./gradlew :clotho-android:validateBinaryCompatibilityTool --stacktrace
+      - name: Upload binary compatibility validation report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: binary-compatibility-validation-android
+          path: clotho-android/build/reports/binary-compatibility/validation
+          if-no-files-found: warn
       - name: Reports
         if: failure()
         uses: actions/upload-artifact@v7
