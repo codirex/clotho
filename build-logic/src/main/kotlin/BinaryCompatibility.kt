@@ -11,6 +11,9 @@ import org.gradle.kotlin.dsl.register
 
 private const val PUBLISHED_GROUP = "org.codirex.clotho"
 
+/** The version-controlled manifest of approved binary breaks, relative to the root project. */
+private const val APPROVED_BREAKS_PATH = "binary-compatibility/approved-breaks.xml"
+
 /** One artifact of the published baseline release, resolved from Maven without its dependencies. */
 class PublishedBaseline internal constructor(
     val module: String,
@@ -88,11 +91,17 @@ private fun Project.requireMavenBaseline(baseline: PublishedBaseline) {
 }
 
 /**
- * Registers `validateBinaryCompatibilityTool`: compares [oldArchives] with [newArchives] using the
- * given dependency classpaths, reports under `build/reports/binary-compatibility/validation/` and
- * never fails on detected changes (this is validation of the tooling, not the enforced gate).
+ * Registers two tasks for one published artifact (named [reportName]):
+ *
+ * - `validateBinaryCompatibilityTool` compares [oldArchives] with [newArchives] using the given
+ *   dependency classpaths and writes the complete, unfiltered reports under
+ *   `build/reports/binary-compatibility/validation/`. It never fails on detected changes.
+ * - `verifyBinaryCompatibility` reads that XML report and enforces the approved-break manifest
+ *   (see [BinaryCompatibilityGate]). It is not wired into `check` yet.
  *
  * Every [baselines] entry is checked to be the pinned Maven artifact before the comparison runs.
+ *
+ * @return the (non-enforcing) comparison task
  */
 fun Project.registerBinaryCompatibilityValidation(
     reportName: String,
@@ -104,24 +113,39 @@ fun Project.registerBinaryCompatibilityValidation(
     newClasspath: FileCollection = files(),
 ): TaskProvider<JapicmpTask> {
     val reportDirectory = layout.buildDirectory.dir("reports/binary-compatibility/validation")
-    return tasks.register<JapicmpTask>("validateBinaryCompatibilityTool") {
+    val validation =
+        tasks.register<JapicmpTask>("validateBinaryCompatibilityTool") {
+            group = "verification"
+            description = taskDescription
+
+            this.oldArchives.from(oldArchives)
+            this.newArchives.from(newArchives)
+            this.oldClasspath.from(oldClasspath)
+            this.newClasspath.from(newClasspath)
+
+            doFirst { baselines.forEach { project.requireMavenBaseline(it) } }
+
+            accessModifier.set("protected")
+            includeSynthetic.set(true)
+            onlyModified.set(true)
+            onlyBinaryIncompatibleModified.set(true)
+            failOnModification.set(false)
+
+            xmlOutputFile.set(reportDirectory.map { it.file("$reportName.xml") })
+            mdOutputFile.set(reportDirectory.map { it.file("$reportName.md") })
+        }
+
+    tasks.register<VerifyBinaryCompatibility>("verifyBinaryCompatibility") {
         group = "verification"
-        description = taskDescription
+        description =
+            "Fails on any binary incompatibility that is not matched by exactly one approved break."
 
-        this.oldArchives.from(oldArchives)
-        this.newArchives.from(newArchives)
-        this.oldClasspath.from(oldClasspath)
-        this.newClasspath.from(newClasspath)
-
-        doFirst { baselines.forEach { project.requireMavenBaseline(it) } }
-
-        accessModifier.set("protected")
-        includeSynthetic.set(true)
-        onlyModified.set(true)
-        onlyBinaryIncompatibleModified.set(true)
-        failOnModification.set(false)
-
-        xmlOutputFile.set(reportDirectory.map { it.file("$reportName.xml") })
-        mdOutputFile.set(reportDirectory.map { it.file("$reportName.md") })
+        artifact.set(reportName)
+        targetRelease.set(providers.gradleProperty("VERSION_NAME"))
+        japicmpReport.set(validation.flatMap { it.xmlOutputFile })
+        manifest.set(rootProject.layout.projectDirectory.file(APPROVED_BREAKS_PATH))
+        summary.set(layout.buildDirectory.file("reports/binary-compatibility/gate/$reportName.md"))
     }
+
+    return validation
 }
