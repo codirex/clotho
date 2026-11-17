@@ -1,3 +1,5 @@
+import org.codirex.clotho.build.JApiCmpReport
+import org.codirex.clotho.build.MemberKind
 import org.codirex.clotho.build.publishedBaseline
 import org.codirex.clotho.build.registerBinaryCompatibilityValidation
 
@@ -99,6 +101,19 @@ tasks.register("verifyBinaryCompatibilityToolDetectsBreakingChange") {
             "JApiCmp did not report the deliberately removed public method. Report: $report"
         }
 
+        // The gate's own parser must understand a real JApiCmp report, not only hand-written ones.
+        val breaks = JApiCmpReport.readBreaks("fixture", report)
+        check(
+            breaks.any {
+                it.kind == MemberKind.METHOD &&
+                    it.name == "removedMethod" &&
+                    it.change == "METHOD_REMOVED"
+            },
+        ) {
+            "The gate parser did not extract the removed fixture method from the real report. Parsed: $breaks"
+        }
+
         logger.lifecycle("JApiCmp negative-control passed: removedMethod was detected as REMOVED.")
+        logger.lifecycle("Gate parser extracted: ${breaks.joinToString("; ")}")
     }
 }

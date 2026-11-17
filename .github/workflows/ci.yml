@@ -31,6 +31,8 @@ jobs:
       - run: chmod +x gradlew
       - name: Build and test
         run: ./gradlew :clotho:build :clotho-test:build --stacktrace
+      - name: Test the binary compatibility gate (build-logic)
+        run: ./gradlew -p build-logic test --stacktrace
       - name: Validate JApiCmp integration against the published core baseline
         run: ./gradlew :clotho:validateBinaryCompatibilityTool --stacktrace
       - name: Validate JApiCmp integration against the published test baseline
@@ -120,6 +122,21 @@ jobs:
         with:
           name: binary-compatibility-validation-android
           path: clotho-android/build/reports/binary-compatibility/validation
+          if-no-files-found: warn
+      # Informational until the gate is enabled in the required CI path: a failure here does not
+      # fail the job, but the summaries show every break the gate would currently reject.
+      - name: Binary compatibility gate (not yet enforced)
+        continue-on-error: true
+        run: ./gradlew checkBinaryCompatibility --stacktrace
+      - name: Upload binary compatibility gate reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: binary-compatibility-gate
+          path: |
+            clotho/build/reports/binary-compatibility/gate
+            clotho-test/build/reports/binary-compatibility/gate
+            clotho-android/build/reports/binary-compatibility/gate
           if-no-files-found: warn
       - name: Reports
         if: failure()

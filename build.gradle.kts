@@ -11,3 +11,15 @@ allprojects {
     group = clothoGroup
     version = clothoVersion
 }
+
+// Runs the approved-break gate for every published code artifact. Not part of `check` yet: it is
+// enabled in CI only after the manifest, matching and stale-entry detection are covered by tests.
+tasks.register("checkBinaryCompatibility") {
+    group = "verification"
+    description = "Enforces the approved-break manifest for every published code artifact."
+    dependsOn(
+        ":clotho:verifyBinaryCompatibility",
+        ":clotho-test:verifyBinaryCompatibility",
+        ":clotho-android:verifyBinaryCompatibility",
+    )
+}

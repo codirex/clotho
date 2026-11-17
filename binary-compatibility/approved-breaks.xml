@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Approved binary breaks for the release being built (VERSION_NAME). See README.md in this directory.
+
+  Keep this empty unless a release PR intentionally accepts a binary break against the published
+  baseline. Every entry needs reviewer approval in that PR, and entries are removed or revised once
+  the approved release becomes the new baseline.
+-->
+<approvedBreaks>
+</approvedBreaks>
