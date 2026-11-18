@@ -119,18 +119,23 @@ jobs:
         run: ./gradlew :clotho-android:validateBinaryCompatibilityTool --stacktrace
       # Required: fails the job on any binary break that is not an exactly matching approved break
       # (see binary-compatibility/README.md). Covers all three published code artifacts.
+      # --continue keeps the independent gates running after one fails, so every artifact still
+      # gets its summary; the job fails all the same.
       - name: Binary compatibility gate
-        run: ./gradlew checkBinaryCompatibility --stacktrace
+        run: ./gradlew checkBinaryCompatibility --continue --stacktrace
       - name: Show binary compatibility reports
         if: always()
         shell: bash
         run: |
+          # Print whatever exists; a missing report must not hide the others.
           for file in */build/reports/binary-compatibility/validation/*.md */build/reports/binary-compatibility/gate/*.md; do
+            [ -f "$file" ] || continue
             echo "=== $file"
             cat "$file"
             echo
           done
           for file in clotho/build/reports/binary-compatibility/validation/clotho.xml clotho-test/build/reports/binary-compatibility/validation/clotho-test.xml clotho-android/build/reports/binary-compatibility/validation/clotho-android.xml; do
+            [ -f "$file" ] || continue
             echo "=== $file ($(wc -c < "$file") bytes)"
             cat "$file"
             echo
