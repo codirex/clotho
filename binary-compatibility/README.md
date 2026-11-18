@@ -20,6 +20,13 @@ matches fails the gate. The gate never edits or filters the JApiCmp reports, and
 summary to `build/reports/binary-compatibility/gate/<artifact>.md` (also on failure) that contains
 ready-to-edit entries for every unapproved break.
 
+## Running it locally
+
+`./gradlew build` runs the gate for `:clotho` and `:clotho-test` through `check`;
+`./gradlew checkBinaryCompatibility` runs it for all three artifacts, including `:clotho-android`.
+The published baseline is resolved from Maven Central, so these tasks need network access. The
+gate's own unit tests run with `./gradlew -p build-logic test`.
+
 ## Entry format
 
 One `<break>` per incompatibility. Wildcards and package-wide entries are rejected, as are unknown
