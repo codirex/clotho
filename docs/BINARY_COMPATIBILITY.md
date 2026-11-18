@@ -118,6 +118,10 @@ matches, wrong-release and stale entries, strict manifest validation and report 
 covered by automated tests (`./gradlew -p build-logic test`, run in CI). That was the condition for
 enabling CI enforcement.
 
+One limit comes from the report itself: JApiCmp lists a removed inherited member once per class,
+without naming it, so an entry for it approves the change for the whole class. See "Inherited
+members" in `binary-compatibility/README.md` for how reviewers should treat such entries.
+
 ## Validation before enabling the gate
 
 These checks were completed in CI before the gate was wired into `check`:
@@ -144,6 +148,7 @@ These checks were completed in CI before the gate was wired into `check`:
   manifest entry and accepted with an exactly matching entry.
 
 The gate is wired into the required CI path: each published module's `check` depends on its
-`verifyBinaryCompatibility` task (so `./gradlew build` enforces it for `clotho` and `clotho-test`),
-and the Android CI job runs `checkBinaryCompatibility` explicitly because it does not run `check`.
-Builds resolve the published baseline from Maven Central and therefore need network access.
+`verifyBinaryCompatibility` task, so `./gradlew build` enforces it for all three artifacts. The JVM
+CI job runs `:clotho:build :clotho-test:build`, and the Android CI job runs
+`checkBinaryCompatibility --continue` explicitly because it does not run `check`. Builds resolve the
+published baseline from Maven Central and therefore need network access.
