@@ -23,12 +23,15 @@ ready-to-edit entries for every unapproved break.
 ## Running it locally
 
 Every published module's `check` task depends on its gate, so `./gradlew build` enforces it for all
-three artifacts (the Android module needs the Android SDK). To build only the JVM modules, use
-`./gradlew :clotho:build :clotho-test:build`. `./gradlew checkBinaryCompatibility` runs just the
-three gates, including `:clotho-android`, without a full build; add `--continue` to still get every
-artifact's summary when one gate fails.
+three artifacts. `./gradlew checkBinaryCompatibility` runs just the three gates without a full
+build; add `--continue` to still get every artifact's summary when one gate fails.
 
-The published baseline is resolved from Maven Central, so these tasks need network access. The
+Naming tasks (`./gradlew :clotho:build :clotho-test:build`, as the JVM CI job does) skips the
+Android tasks but not the Android SDK requirement: Gradle configures every project in
+`settings.gradle.kts`, including `:clotho-android` and `:app`, so an Android SDK must be configured
+for any invocation in this checkout.
+
+The published baseline is resolved from Maven Central, so these tasks also need network access. The
 gate's own unit tests run with `./gradlew -p build-logic test`.
 
 ## Entry format
