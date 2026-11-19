@@ -112,16 +112,43 @@ break must fail the gate. This makes exceptions explicit and temporary rather th
 new or changed breaks. Exception entries require reviewer approval in the release PR and are
 removed or revised after the approved release is established as the new baseline.
 
-The manifest is an implementation requirement for the gate; do not enable CI enforcement until
-matching, stale-entry detection, and report retention are covered by automated tests.
+The manifest is `binary-compatibility/approved-breaks.xml` (entry format and rules in
+`binary-compatibility/README.md`) and the gate lives in `build-logic`. Exact matching, ambiguous
+matches, wrong-release and stale entries, strict manifest validation and report retention are
+covered by automated tests (`./gradlew -p build-logic test`, run in CI). That was the condition for
+enabling CI enforcement.
 
-## Validation still required before enabling the gate
+One limit comes from the report itself: JApiCmp lists a removed inherited member once per class,
+without naming it, so an entry for it approves the change for the whole class. See "Inherited
+members" in `binary-compatibility/README.md` for how reviewers should treat such entries.
 
-- Verify the selected JApiCmp plugin version works with this repository's Gradle wrapper and
-  configuration-cache/build conventions.
-- Prove that Maven Central resolves all three `0.1.0-alpha02` artifacts in CI.
-- Verify the Android AAR extraction path against both the published AAR and the current AGP
-  release AAR.
-- Run the comparison against the current `main` artifacts and manually inspect the initial report.
-  The first run is expected to establish the baseline, not to hide unexplained incompatibilities.
-- Only after those checks pass should the task be wired into the required CI `check` path.
+## Validation before enabling the gate
+
+These checks were completed in CI before the gate was wired into `check`:
+
+- **Gradle wrapper:** the plugin (0.4.6) runs on the repository's Gradle 9.8.2 wrapper. The build
+  does not enable the configuration cache (`gradle.properties`), and the comparison and gate tasks
+  were not tested with it: the comparison task checks its baselines through `project` at
+  execution time.
+- **Maven Central:** CI resolves all three `0.1.0-alpha02` artifacts (the `clotho` and
+  `clotho-test` jars and the `clotho-android` AAR). Each comparison task verifies before running
+  that its baseline is exactly that Maven artifact and not a local file.
+- **Android AAR path:** the `classes.jar` inside the published AAR and inside the current release
+  AAR are extracted and compared (the report names `classes.jar` on both sides). The comparison is
+  configured with the core jar of the matching side, the AndroidX dependencies and the SDK
+  `android.jar` as classpath, and no missing classes are ignored (`ignoreMissingClasses` is `false`
+  in every report).
+- **Initial report against `main`:** inspected in the CI log. All three comparisons report no
+  binary-incompatible modification (an empty `<classes/>` in each XML report) and the gate reports
+  0 incompatibilities, so the first run establishes the baseline without hiding anything. For
+  `clotho-test` the report shows the published core jar as the old classpath and the current core
+  jar as the new one.
+- **Tooling proof:** `:clotho:verifyBinaryCompatibilityToolDetectsBreakingChange` shows on a real
+  JApiCmp report that a deliberately removed method is detected, rejected by the gate without a
+  manifest entry and accepted with an exactly matching entry.
+
+The gate is wired into the required CI path: each published module's `check` depends on its
+`verifyBinaryCompatibility` task, so `./gradlew build` enforces it for all three artifacts. The JVM
+CI job runs `:clotho:build :clotho-test:build`, and the Android CI job runs
+`checkBinaryCompatibility --continue` explicitly because it does not run `check`. Builds resolve the
+published baseline from Maven Central and therefore need network access.

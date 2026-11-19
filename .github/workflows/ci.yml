@@ -14,6 +14,7 @@ permissions:
 
 jobs:
   # Pure JVM modules: format, Android API 24 check, strict javadoc, all tests, coverage report.
+  # `build` includes the binary-compatibility gate of :clotho and :clotho-test (via `check`).
   jvm:
     name: JVM modules (JDK ${{ matrix.java }})
     runs-on: ubuntu-latest
@@ -37,16 +38,16 @@ jobs:
         run: ./gradlew :clotho:validateBinaryCompatibilityTool --stacktrace
       - name: Validate JApiCmp integration against the published test baseline
         run: ./gradlew :clotho-test:validateBinaryCompatibilityTool --stacktrace
-      - name: Verify JApiCmp detects a deliberate binary break
+      - name: Verify JApiCmp and the gate handle a deliberate binary break
         run: ./gradlew :clotho:verifyBinaryCompatibilityToolDetectsBreakingChange --stacktrace
-      - name: Upload binary compatibility validation reports
+      - name: Upload binary compatibility reports
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: binary-compatibility-validation-jdk${{ matrix.java }}
           path: |
-            clotho/build/reports/binary-compatibility/validation
-            clotho-test/build/reports/binary-compatibility/validation
+            clotho/build/reports/binary-compatibility
+            clotho-test/build/reports/binary-compatibility
           if-no-files-found: warn
       - name: Coverage report
         if: matrix.java == 17
@@ -116,27 +117,38 @@ jobs:
         run: ./gradlew :clotho-android:testDebugUnitTest :clotho-android:lintDebug :clotho-android:spotlessCheck :app:assembleDebug --stacktrace
       - name: Validate JApiCmp integration against the published Android baseline
         run: ./gradlew :clotho-android:validateBinaryCompatibilityTool --stacktrace
-      - name: Upload binary compatibility validation report
+      # Required: fails the job on any binary break that is not an exactly matching approved break
+      # (see binary-compatibility/README.md). Covers all three published code artifacts.
+      # --continue keeps the independent gates running after one fails, so every artifact still
+      # gets its summary; the job fails all the same.
+      - name: Binary compatibility gate
+        run: ./gradlew checkBinaryCompatibility --continue --stacktrace
+      - name: Show binary compatibility reports
+        if: always()
+        shell: bash
+        run: |
+          # Print whatever exists; a missing report must not hide the others.
+          for file in */build/reports/binary-compatibility/validation/*.md */build/reports/binary-compatibility/gate/*.md; do
+            [ -f "$file" ] || continue
+            echo "=== $file"
+            cat "$file"
+            echo
+          done
+          for file in clotho/build/reports/binary-compatibility/validation/clotho.xml clotho-test/build/reports/binary-compatibility/validation/clotho-test.xml clotho-android/build/reports/binary-compatibility/validation/clotho-android.xml; do
+            [ -f "$file" ] || continue
+            echo "=== $file ($(wc -c < "$file") bytes)"
+            cat "$file"
+            echo
+          done
+      - name: Upload binary compatibility reports
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: binary-compatibility-validation-android
-          path: clotho-android/build/reports/binary-compatibility/validation
-          if-no-files-found: warn
-      # Informational until the gate is enabled in the required CI path: a failure here does not
-      # fail the job, but the summaries show every break the gate would currently reject.
-      - name: Binary compatibility gate (not yet enforced)
-        continue-on-error: true
-        run: ./gradlew checkBinaryCompatibility --stacktrace
-      - name: Upload binary compatibility gate reports
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: binary-compatibility-gate
+          name: binary-compatibility-android
           path: |
-            clotho/build/reports/binary-compatibility/gate
-            clotho-test/build/reports/binary-compatibility/gate
-            clotho-android/build/reports/binary-compatibility/gate
+            clotho/build/reports/binary-compatibility
+            clotho-test/build/reports/binary-compatibility
+            clotho-android/build/reports/binary-compatibility
           if-no-files-found: warn
       - name: Reports
         if: failure()

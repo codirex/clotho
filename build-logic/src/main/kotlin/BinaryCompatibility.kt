@@ -97,7 +97,8 @@ private fun Project.requireMavenBaseline(baseline: PublishedBaseline) {
  *   dependency classpaths and writes the complete, unfiltered reports under
  *   `build/reports/binary-compatibility/validation/`. It never fails on detected changes.
  * - `verifyBinaryCompatibility` reads that XML report and enforces the approved-break manifest
- *   (see [BinaryCompatibilityGate]). It is not wired into `check` yet.
+ *   (see [BinaryCompatibilityGate]). The module's `check` task depends on it, so `./gradlew build`
+ *   enforces the gate.
  *
  * Every [baselines] entry is checked to be the pinned Maven artifact before the comparison runs.
  *
@@ -135,17 +136,22 @@ fun Project.registerBinaryCompatibilityValidation(
             mdOutputFile.set(reportDirectory.map { it.file("$reportName.md") })
         }
 
-    tasks.register<VerifyBinaryCompatibility>("verifyBinaryCompatibility") {
-        group = "verification"
-        description =
-            "Fails on any binary incompatibility that is not matched by exactly one approved break."
+    val gate =
+        tasks.register<VerifyBinaryCompatibility>("verifyBinaryCompatibility") {
+            group = "verification"
+            description =
+                "Fails on any binary incompatibility that is not matched by exactly one approved break."
 
-        artifact.set(reportName)
-        targetRelease.set(providers.gradleProperty("VERSION_NAME"))
-        japicmpReport.set(validation.flatMap { it.xmlOutputFile })
-        manifest.set(rootProject.layout.projectDirectory.file(APPROVED_BREAKS_PATH))
-        summary.set(layout.buildDirectory.file("reports/binary-compatibility/gate/$reportName.md"))
-    }
+            artifact.set(reportName)
+            targetRelease.set(providers.gradleProperty("VERSION_NAME"))
+            japicmpReport.set(validation.flatMap { it.xmlOutputFile })
+            manifest.set(rootProject.layout.projectDirectory.file(APPROVED_BREAKS_PATH))
+            summary.set(layout.buildDirectory.file("reports/binary-compatibility/gate/$reportName.md"))
+        }
+
+    // Enforce through the existing `./gradlew build` / CI path. The lookup is lazy so it does not
+    // depend on whether the Java or Android plugin has registered `check` yet.
+    tasks.matching { it.name == "check" }.configureEach { dependsOn(gate) }
 
     return validation
 }

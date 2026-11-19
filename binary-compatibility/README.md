@@ -20,6 +20,20 @@ matches fails the gate. The gate never edits or filters the JApiCmp reports, and
 summary to `build/reports/binary-compatibility/gate/<artifact>.md` (also on failure) that contains
 ready-to-edit entries for every unapproved break.
 
+## Running it locally
+
+Every published module's `check` task depends on its gate, so `./gradlew build` enforces it for all
+three artifacts. `./gradlew checkBinaryCompatibility` runs just the three gates without a full
+build; add `--continue` to still get every artifact's summary when one gate fails.
+
+Naming tasks (`./gradlew :clotho:build :clotho-test:build`, as the JVM CI job does) skips the
+Android tasks but not the Android SDK requirement: Gradle configures every project in
+`settings.gradle.kts`, including `:clotho-android` and `:app`, so an Android SDK must be configured
+for any invocation in this checkout.
+
+The published baseline is resolved from Maven Central, so these tasks also need network access. The
+gate's own unit tests run with `./gradlew -p build-logic test`.
+
 ## Entry format
 
 One `<break>` per incompatibility. Wildcards and package-wide entries are rejected, as are unknown
@@ -54,3 +68,15 @@ or missing attributes. Member data describes the **baseline** declaration.
 
 Because `release` must equal `VERSION_NAME`, add entries in the release PR together with the version
 bump, and remove or revise them after the approved release becomes the new baseline.
+
+## Inherited members
+
+JApiCmp reports `METHOD_REMOVED_IN_SUPERCLASS` and `FIELD_REMOVED_IN_SUPERCLASS` once per class,
+as a class-level change (`kind="CLASS"`) that does not name the removed members. One entry for such
+a change therefore approves it for the whole class, however many inherited members were removed.
+
+- When the superclass is part of a Clotho artifact, every removed member is also reported on the
+  superclass itself (`METHOD_REMOVED` / `FIELD_REMOVED`) and needs its own entry in the artifact
+  that declares it.
+- When the superclass comes from outside Clotho, the gate cannot see which members were removed.
+  List the affected members in the entry's `<rationale>` so the reviewer approves them knowingly.

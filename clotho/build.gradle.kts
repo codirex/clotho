@@ -1,3 +1,4 @@
+import org.codirex.clotho.build.BinaryCompatibilityGate
 import org.codirex.clotho.build.JApiCmpReport
 import org.codirex.clotho.build.MemberKind
 import org.codirex.clotho.build.publishedBaseline
@@ -14,8 +15,8 @@ tasks.jar {
     }
 }
 
-// Validation only: prove JApiCmp resolves the published baseline and runs on the repository's
-// Gradle wrapper before any compatibility check is wired into the required CI path.
+// Binary compatibility: compare the published baseline with the current jar (see build-logic).
+// `check` depends on the enforcing gate registered here.
 val coreBaseline = publishedBaseline("clotho")
 
 registerBinaryCompatibilityValidation(
@@ -28,7 +29,8 @@ registerBinaryCompatibilityValidation(
 )
 
 // Self-contained fixture comparison: prove the configured JApiCmp version detects a removed
-// public method without changing the library's real API or making the production check enforcing.
+// public method, and that the enforcing gate rejects it (and accepts it once approved), without
+// changing the library's real API.
 val binaryCompatibilityOldFixtureCompile =
     tasks.register<JavaCompile>("compileBinaryCompatibilityOldFixture") {
         source(fileTree("src/japicmp-validation/old") { include("**/*.java") })
@@ -87,7 +89,7 @@ val compareBinaryCompatibilityFixtures =
 
 tasks.register("verifyBinaryCompatibilityToolDetectsBreakingChange") {
     group = "verification"
-    description = "Asserts JApiCmp detects the deliberately removed fixture method."
+    description = "Asserts JApiCmp and the enforcing gate handle the deliberately removed fixture method."
     dependsOn(compareBinaryCompatibilityFixtures)
 
     doLast {
@@ -102,7 +104,7 @@ tasks.register("verifyBinaryCompatibilityToolDetectsBreakingChange") {
         }
 
         // The gate's own parser must understand a real JApiCmp report, not only hand-written ones.
-        val breaks = JApiCmpReport.readBreaks("fixture", report)
+        val breaks = JApiCmpReport.readBreaks("clotho", report)
         check(
             breaks.any {
                 it.kind == MemberKind.METHOD &&
@@ -113,7 +115,45 @@ tasks.register("verifyBinaryCompatibilityToolDetectsBreakingChange") {
             "The gate parser did not extract the removed fixture method from the real report. Parsed: $breaks"
         }
 
+        // End to end on the real report: an unapproved break fails the gate, the same break passes
+        // once an exactly matching entry exists for the release being built.
+        val gateDirectory = layout.buildDirectory.dir("binary-compatibility/gate-fixture").get().asFile
+        gateDirectory.mkdirs()
+        val fixtureRelease = "0.0.0-fixture"
+
+        val emptyManifest = File(gateDirectory, "empty-manifest.xml")
+        emptyManifest.writeText("<approvedBreaks/>")
+        val rejection =
+            runCatching {
+                    BinaryCompatibilityGate.verify(
+                        "clotho",
+                        fixtureRelease,
+                        report,
+                        emptyManifest,
+                        File(gateDirectory, "rejected.md"),
+                    )
+                }
+                .exceptionOrNull()
+        check(rejection is GradleException) {
+            "The gate must reject unapproved breaks from a real report, but got: $rejection"
+        }
+
+        val approvedManifest = File(gateDirectory, "approved-manifest.xml")
+        approvedManifest.writeText(
+            "<approvedBreaks>" +
+                breaks.joinToString("") { it.manifestSnippet(fixtureRelease) } +
+                "</approvedBreaks>",
+        )
+        BinaryCompatibilityGate.verify(
+            "clotho",
+            fixtureRelease,
+            report,
+            approvedManifest,
+            File(gateDirectory, "approved.md"),
+        )
+
         logger.lifecycle("JApiCmp negative-control passed: removedMethod was detected as REMOVED.")
         logger.lifecycle("Gate parser extracted: ${breaks.joinToString("; ")}")
+        logger.lifecycle("Gate end-to-end: rejected without an entry, accepted with an exact entry.")
     }
 }
