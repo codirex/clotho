@@ -30,6 +30,8 @@ tasks.register<JavaExec>("bench") {
 
     val quick = providers.gradleProperty("benchQuick").isPresent
     val filter = providers.gradleProperty("benchFilter").getOrElse(".*")
+    // Optional extra JMH profiler, e.g. -PbenchProfile=stack:lines=6;top=15
+    val profile = providers.gradleProperty("benchProfile").orNull
     val out = layout.buildDirectory.file("results/jmh/results.json").get().asFile
 
     doFirst { out.parentFile.mkdirs() }
@@ -41,5 +43,6 @@ tasks.register<JavaExec>("bench") {
             listOf("-f", "3", "-wi", "5", "-w", "2s", "-i", "10", "-r", "2s")
         }
     // -prof gc adds allocation per operation (gc.alloc.rate.norm), which is part of the comparison.
-    args(listOf(filter, "-rf", "json", "-rff", out.absolutePath, "-prof", "gc") + timing)
+    val extraProfiler = if (profile == null) emptyList() else listOf("-prof", profile)
+    args(listOf(filter, "-rf", "json", "-rff", out.absolutePath, "-prof", "gc") + extraProfiler + timing)
 }
