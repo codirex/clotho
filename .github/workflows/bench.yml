@@ -14,6 +14,10 @@ on:
         description: Benchmark class regex (empty = all)
         type: string
         default: ""
+      profiler:
+        description: Optional extra JMH profiler spec, for example stack:lines=6;top=15
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -47,11 +51,14 @@ jobs:
           args=()
           [ "${{ inputs.quick }}" = "true" ] && args+=("-PbenchQuick")
           [ -n "${{ inputs.filter }}" ] && args+=("-PbenchFilter=${{ inputs.filter }}")
+          [ -n "${{ inputs.profiler }}" ] && args+=("-PbenchProfile=${{ inputs.profiler }}")
           ./gradlew -PwithBench :clotho-bench:bench "${args[@]}"
       - name: Build the report
         run: |
           python3 scripts/jmh_to_md.py clotho-bench/build/results/jmh/results.json environment.txt > report.md
           cat report.md >> "$GITHUB_STEP_SUMMARY"
+          # Also in the job log, so the result can be read without downloading the artifact.
+          cat report.md
       - uses: actions/upload-artifact@v7
         with:
           name: jmh-results
