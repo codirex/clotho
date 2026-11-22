@@ -649,8 +649,10 @@ These are enforced where possible by the build.
 8. `-Xlint:all -Werror`; string concatenation compiled inline because `StringConcatFactory` does not
    exist on API 24.
 
-Not set up yet: automatic binary-compatibility checking against the published baseline (planned
-for the first stable release).
+Binary compatibility is enforced too: the build compares `clotho`, `clotho-test` and the
+`clotho-android` AAR with the published `0.1.0-alpha02` artifacts, and every binary break must be an
+approved entry in `binary-compatibility/approved-breaks.xml`. See
+[docs/BINARY_COMPATIBILITY.md](docs/BINARY_COMPATIBILITY.md).
 
 ---
 
@@ -759,10 +761,10 @@ Building the `app` sample needs Android SDK 37. Optional modules:
 
 **Done:** core (`Realm`, `Job`, `Outcome`), engine (work-stealing pool, lanes, priorities, bounded
 queues), Android (main lane, lifecycle realms), timers (`Cadence`) and `Cell`, test tools
-(`clotho-test`), stress tests and jcstress scenarios, JMH benchmarks, CI and Maven Central publishing.
+(`clotho-test`), stress tests and jcstress scenarios, JMH benchmarks, binary-compatibility checking
+against the published baseline, CI and Maven Central publishing.
 
-**Still open before a stable release:** a current release-candidate benchmark run. Automatic
-binary-compatibility checking against the published baseline is planned for the first stable release.
+**Still open before a stable release:** a current release-candidate benchmark run.
 
 **Later:** `Flow` (value streams, after the first stable release); `clotho-ktx` (optional Kotlin
 extensions).
